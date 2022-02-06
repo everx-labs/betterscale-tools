@@ -1,9 +1,12 @@
+use std::net::SocketAddrV4;
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use argh::FromArgs;
-use std::net::SocketAddrV4;
 
 mod dht;
 mod ed25519;
+mod zerostate;
 
 fn main() {
     if let Err(e) = run(argh::from_env()) {
@@ -22,6 +25,17 @@ fn run(app: App) -> Result<()> {
             print!("{}", dht::generate_dht_config(args.address, &secret));
             Ok(())
         }
+        Subcommand::ZeroState(args) => {
+            let config =
+                std::fs::read_to_string(args.config).context("Failed to read zerostate config")?;
+
+            if !args.output.is_dir() {
+                return Err(anyhow::anyhow!("Expected `output` param to be a directory"));
+            }
+
+            print!("{}", zerostate::prepare_zerostates(args.output, &config)?);
+            Ok(())
+        }
     }
 }
 
@@ -36,6 +50,7 @@ struct App {
 #[argh(subcommand)]
 enum Subcommand {
     DhtNode(CmdDhtNode),
+    ZeroState(CmdZeroState),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -49,6 +64,19 @@ struct CmdDhtNode {
     /// node ADNL key secret
     #[argh(option, long = "secret", short = 's')]
     secret: String,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates zerostate boc file
+#[argh(subcommand, name = "zerostate")]
+struct CmdZeroState {
+    /// path to the zerostate config
+    #[argh(option, long = "config", short = 'c')]
+    config: PathBuf,
+
+    /// destination folder path
+    #[argh(option, long = "output", short = 'o')]
+    output: PathBuf,
 }
 
 fn hex_or_base64<const N: usize>(data: &str) -> Result<[u8; N]> {

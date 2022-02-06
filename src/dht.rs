@@ -13,31 +13,29 @@ pub fn generate_dht_config(address: SocketAddrV4, secret: &SecretKey) -> String 
     let key_pair = KeyPair::from(secret);
     let signature = sign_dht_node(address, &key_pair, now);
 
-    let json = serde_json::json!(
-        {
-            "@type": "dht.node",
-            "id": {
-                "@type": "pub.ed25519",
-                "key": base64::encode(key_pair.public_key.as_bytes())
-            },
-            "addr_list": {
-                "@type": "adnl.addressList",
-                "addrs": [
-                    {
-                        "@type": "adnl.address.udp",
-                        "ip": convert_ip(address.ip()),
-                        "port": address.port()
-                    }
-                ],
-                "version": now,
-                "reinit_date": now,
-                "priority": 0i32,
-                "expire_at": 0i32
-            },
+    let json = serde_json::json!({
+        "@type": "dht.node",
+        "id": {
+            "@type": "pub.ed25519",
+            "key": base64::encode(key_pair.public_key.as_bytes())
+        },
+        "addr_list": {
+            "@type": "adnl.addressList",
+            "addrs": [
+                {
+                    "@type": "adnl.address.udp",
+                    "ip": convert_ip(address.ip()),
+                    "port": address.port()
+                }
+            ],
             "version": now,
-            "signature": base64::encode(signature)
-        }
-    );
+            "reinit_date": now,
+            "priority": 0i32,
+            "expire_at": 0i32
+        },
+        "version": now,
+        "signature": base64::encode(signature)
+    });
 
     serde_json::to_string_pretty(&json).expect("Shouldn't fail")
 }
