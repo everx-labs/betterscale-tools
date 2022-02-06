@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -5,11 +6,20 @@ use anyhow::{Context, Result};
 use nekoton_utils::*;
 use num_bigint::BigInt;
 use serde::Deserialize;
-use ton_block::{AddSub, Serializable};
+use ton_block::{AddSub, HashmapAugType, Serializable};
 
-pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<String> {
+use self::system_accounts::*;
+use crate::ed25519::*;
+
+mod system_accounts;
+
+pub fn prepare_zerostates<P: AsRef<Path>>(
+    path: P,
+    config: &str,
+    pubkey: PublicKey,
+) -> Result<String> {
     let mut mc_zerstate =
-        prepare_mc_zerostate(config).context("Failed to prepare masterchain zerostate")?;
+        prepare_mc_zerostate(config, pubkey).context("Failed to prepare masterchain zerostate")?;
     let now = mc_zerstate.gen_time();
 
     let mut ex = mc_zerstate
@@ -53,8 +63,14 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
         .config_params
         .setref(12u32.serialize()?.into(), &workchains.serialize()?)?;
 
-    let catchain_config = ex.config.catchain_config()?;
-    let current_validators = ex.config.validator_set()?;
+    let catchain_config = ex
+        .config
+        .catchain_config()
+        .context("Failed to read catchain config")?;
+    let current_validators = ex
+        .config
+        .validator_set()
+        .context("Failed to read validator set")?;
 
     let hash_short = current_validators
         .calc_subset(
@@ -104,33 +120,40 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
     Ok(serde_json::to_string_pretty(&json).expect("Shouldn't fail"))
 }
 
-fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
-    let data =
+fn prepare_mc_zerostate(config: &str, pubkey: PublicKey) -> Result<ton_block::ShardStateUnsplit> {
+    let mut data =
         serde_json::from_str::<ZerostateConfig>(config).context("Failed to parse state config")?;
 
     let mut state = ton_block::ShardStateUnsplit::with_ident(ton_block::ShardIdent::masterchain());
     let mut ex = ton_block::McStateExtra::default();
 
+    data.accounts.insert(
+        data.config.config_address,
+        build_config_state(data.config.config_address, pubkey)
+            .context("Failed to build config state")?,
+    );
+
+    data.accounts.insert(
+        data.config.elector_address,
+        build_elector_state(data.config.elector_address).context("Failed to build config state")?,
+    );
+
     let mut total_balance = ton_block::CurrencyCollection::default();
-    for account in &data.accounts {
-        match &account.state {
+    for (address, account) in data.accounts {
+        match &account {
             ton_block::Account::Account(account) => {
                 total_balance
                     .add(&account.storage.balance)
                     .context("Failed to get total balance")?;
             }
-            ton_block::Account::AccountNone => continue,
+            _ => continue,
         }
 
         state
             .insert_account(
-                &account.address,
-                &ton_block::ShardAccount::with_params(
-                    &account.state,
-                    ton_types::UInt256::default(),
-                    0,
-                )
-                .context("Failed to create shard account")?,
+                &address,
+                &ton_block::ShardAccount::with_params(&account, ton_types::UInt256::default(), 0)
+                    .context("Failed to create shard account")?,
             )
             .context("Failed to insert account")?;
     }
@@ -142,6 +165,8 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     state.set_total_balance(total_balance.clone());
 
     let config = data.config;
+
+    ex.config.config_addr = config.config_address;
 
     // 0
     ex.config
@@ -514,16 +539,9 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
 struct ZerostateConfig {
     global_id: i32,
     gen_utime: u32,
-    accounts: Vec<StateAccount>,
+    #[serde(with = "serde_account_states")]
+    accounts: HashMap<ton_types::UInt256, ton_block::Account>,
     config: NetworkConfig,
-}
-
-#[derive(Deserialize)]
-struct StateAccount {
-    #[serde(with = "serde_uint256")]
-    address: ton_types::UInt256,
-    #[serde(with = "serde_ton_block")]
-    state: ton_block::Account,
 }
 
 #[derive(Deserialize)]
@@ -770,6 +788,30 @@ struct ValidatorSetEntry {
     public_key: [u8; 32],
     #[serde(with = "serde_amount")]
     weight: u64,
+}
+
+mod serde_account_states {
+    use super::*;
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<HashMap<ton_types::UInt256, ton_block::Account>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use ton_block::Deserializable;
+
+        let map = HashMap::<String, String>::deserialize(deserializer)?;
+        map.into_iter()
+            .map(|(key, value)| {
+                let address = ton_types::UInt256::from_str(&key).map_err(D::Error::custom)?;
+                let state =
+                    ton_block::Account::construct_from_base64(&value).map_err(D::Error::custom)?;
+                Ok((address, state))
+            })
+            .collect()
+    }
 }
 
 mod serde_hex_number {

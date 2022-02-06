@@ -33,7 +33,16 @@ fn run(app: App) -> Result<()> {
                 return Err(anyhow::anyhow!("Expected `output` param to be a directory"));
             }
 
-            print!("{}", zerostate::prepare_zerostates(args.output, &config)?);
+            let pubkey = hex_or_base64(&args.pubkey)
+                .ok()
+                .and_then(ed25519::PublicKey::from_bytes)
+                .context("Invalid public key")?;
+
+            print!(
+                "{}",
+                zerostate::prepare_zerostates(args.output, &config, pubkey)
+                    .context("Failed to prepare zerostates")?
+            );
             Ok(())
         }
     }
@@ -73,6 +82,10 @@ struct CmdZeroState {
     /// path to the zerostate config
     #[argh(option, long = "config", short = 'c')]
     config: PathBuf,
+
+    /// system contracts public key
+    #[argh(option, long = "pubkey")]
+    pubkey: String,
 
     /// destination folder path
     #[argh(option, long = "output", short = 'o')]
