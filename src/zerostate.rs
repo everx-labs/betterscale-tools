@@ -489,7 +489,8 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
         config.validator_set.utime_until,
         config.validator_set.main,
         validators,
-    )?;
+    )
+    .context("Failed to build validators list")?;
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam34(
@@ -592,6 +593,7 @@ struct WorkchainDescription {
     enabled_since: u32,
     min_split: u8,
     max_split: u8,
+    #[serde(default)]
     flags: u16,
     active: bool,
     accept_msgs: bool,
@@ -778,7 +780,7 @@ mod serde_hex_number {
         use serde::de::{Deserialize, Error};
 
         let value = String::deserialize(deserializer)?;
-        u64::from_str_radix(&value, 16).map_err(D::Error::custom)
+        u64::from_str_radix(value.trim_start_matches("0x"), 16).map_err(D::Error::custom)
     }
 }
 
@@ -803,6 +805,7 @@ impl<'de> Deserialize<'de> for StringOrNumber {
         use serde::de::Error;
 
         #[derive(Deserialize)]
+        #[serde(untagged)]
         enum Value<'a> {
             String(&'a str),
             Number(u64),
