@@ -263,8 +263,6 @@ pub struct ValidatorSetEntry {
     pub public_key: [u8; 32],
     #[serde(with = "serde_amount")]
     pub weight: u64,
-    #[serde(with = "serde_amount")]
-    pub initial_balance: u64,
 }
 
 mod serde_account_states {

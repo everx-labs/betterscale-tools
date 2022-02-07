@@ -164,24 +164,6 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
             .context("Failed to insert account")?;
     }
 
-    for validator in &data.config.validator_set.validators {
-        let pubkey = match PublicKey::from_bytes(validator.public_key) {
-            Some(pubkey) => pubkey,
-            None => continue,
-        };
-
-        let (address, account) = build_multisig(pubkey, validator.initial_balance)
-            .context("Failed to build validator wallet")?;
-
-        state
-            .insert_account(
-                &address,
-                &ton_block::ShardAccount::with_params(&account, ton_types::UInt256::default(), 0)
-                    .context("Failed to create shard account")?,
-            )
-            .context("Failed to insert validator account")?;
-    }
-
     state.set_min_ref_mc_seqno(u32::MAX);
 
     state.set_global_id(data.global_id);
