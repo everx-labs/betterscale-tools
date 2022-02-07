@@ -13,13 +13,9 @@ use crate::ed25519::*;
 
 mod system_accounts;
 
-pub fn prepare_zerostates<P: AsRef<Path>>(
-    path: P,
-    config: &str,
-    pubkey: PublicKey,
-) -> Result<String> {
+pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<String> {
     let mut mc_zerstate =
-        prepare_mc_zerostate(config, pubkey).context("Failed to prepare masterchain zerostate")?;
+        prepare_mc_zerostate(config).context("Failed to prepare masterchain zerostate")?;
     let now = mc_zerstate.gen_time();
 
     let mut ex = mc_zerstate
@@ -120,17 +116,30 @@ pub fn prepare_zerostates<P: AsRef<Path>>(
     Ok(serde_json::to_string_pretty(&json).expect("Shouldn't fail"))
 }
 
-fn prepare_mc_zerostate(config: &str, pubkey: PublicKey) -> Result<ton_block::ShardStateUnsplit> {
+fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     let jd = &mut serde_json::Deserializer::from_str(config);
     let mut data = serde_path_to_error::deserialize::<_, ZerostateConfig>(jd)
         .context("Failed to parse state config")?;
+
+    let minter_public_key = PublicKey::from_bytes(*data.minter_public_key.as_slice())
+        .context("Invalid minter public key")?;
+    let config_public_key = PublicKey::from_bytes(*data.config_public_key.as_slice())
+        .context("Invalid config public key")?;
 
     let mut state = ton_block::ShardStateUnsplit::with_ident(ton_block::ShardIdent::masterchain());
     let mut ex = ton_block::McStateExtra::default();
 
     data.accounts.insert(
+        Default::default(),
+        build_minter(minter_public_key).context("Failed to build minter state")?,
+    );
+
+    let (tick_tock_address, tick_tock) = build_tick_tock().context("Failed to build tick tock")?;
+    data.accounts.insert(tick_tock_address, tick_tock);
+
+    data.accounts.insert(
         data.config.config_address,
-        build_config_state(data.config.config_address, pubkey)
+        build_config_state(data.config.config_address, config_public_key)
             .context("Failed to build config state")?,
     );
 
@@ -558,6 +567,11 @@ fn prepare_mc_zerostate(config: &str, pubkey: PublicKey) -> Result<ton_block::Sh
 struct ZerostateConfig {
     global_id: i32,
     gen_utime: u32,
+    #[serde(with = "serde_uint256")]
+    config_public_key: ton_types::UInt256,
+    #[serde(with = "serde_uint256")]
+    minter_public_key: ton_types::UInt256,
+
     #[serde(with = "serde_account_states")]
     accounts: HashMap<ton_types::UInt256, ton_block::Account>,
     config: NetworkConfig,

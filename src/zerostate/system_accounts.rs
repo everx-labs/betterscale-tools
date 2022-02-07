@@ -1,8 +1,37 @@
 use anyhow::{Context, Result};
-use ton_block::{GetRepresentationHash, Serializable};
+use ton_block::{Deserializable, GetRepresentationHash, Serializable};
 use ton_types::IBitstring;
 
 use crate::ed25519::*;
+
+pub fn build_minter(pubkey: PublicKey) -> Result<ton_block::Account> {
+    let mut account = ton_block::Account::construct_from_bytes(MINTER_STATE)?;
+
+    if let ton_block::Account::Account(stuff) = &mut account {
+        if let ton_block::AccountState::AccountActive { state_init, .. } = &mut stuff.storage.state
+        {
+            let mut data = ton_types::BuilderData::new();
+            data.append_u32(0)?; // seqno
+            data.append_raw(pubkey.as_bytes(), 256)?; // pubkey
+
+            state_init.data = Some(data.into_cell()?);
+        }
+    }
+
+    Ok(account)
+}
+
+pub fn build_tick_tock() -> Result<(ton_types::UInt256, ton_block::Account)> {
+    let account = ton_block::Account::construct_from_bytes(TICK_TOCK_STATE)?;
+
+    let address = account
+        .state_init()
+        .context("Empty tick tock account")?
+        .hash()
+        .context("Failed to compute tick tock hash")?;
+
+    Ok((address, account))
+}
 
 pub fn build_config_state(
     address: ton_types::UInt256,
@@ -170,11 +199,15 @@ fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt>
 
 static CONFIG_CODE: &[u8] = include_bytes!("config_code.boc");
 static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
+static TICK_TOCK_STATE: &[u8] = include_bytes!("tick_tock_state.boc");
+static MINTER_STATE: &[u8] = include_bytes!("minter_state.boc");
+
 static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use ton_block::HashmapAugType;
 
     use super::*;
 
@@ -189,6 +222,17 @@ mod tests {
             build_validator_wallet(pubkey, 1000).unwrap().0,
             ton_types::UInt256::from_str(
                 "9d98e2c829b309abebfa1d3745a62a8b11b68233a1b5d1044f6e09e380d67b97"
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn check_tick_tock_address() {
+        assert_eq!(
+            build_tick_tock().unwrap().0,
+            ton_types::UInt256::from_str(
+                "04f64c6afbff3dd10d8ba6707790ac9670d540f37a9448b0337baa6a5a92acac"
             )
             .unwrap()
         );
