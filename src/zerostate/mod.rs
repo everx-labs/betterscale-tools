@@ -100,6 +100,7 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
 
     let shard_id = ton_block::SHARD_FULL as i64;
     let json = serde_json::json!({
+        "@type": "validator.config.global",
         "zero_state": {
             "workchain": -1,
             "shard": shard_id,
