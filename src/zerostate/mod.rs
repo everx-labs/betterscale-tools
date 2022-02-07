@@ -502,23 +502,20 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     // 34
 
     let validators = config
-        .validator_set
-        .validators
+        .validators_public_keys
         .into_iter()
         .map(|validator| {
-            let public_key = ton_block::SigPubKey::from_bytes(&validator.public_key)?;
+            let public_key = ton_block::SigPubKey::from_bytes(validator.as_slice())?;
             Ok(ton_block::ValidatorDescr::with_params(
-                public_key,
-                validator.weight,
-                None,
+                public_key, 0x11, None,
             ))
         })
         .collect::<Result<Vec<_>>>()?;
 
     let cur_validators = ton_block::ValidatorSet::new(
-        config.validator_set.utime_since,
-        config.validator_set.utime_until,
-        config.validator_set.main,
+        data.gen_utime,
+        data.gen_utime,
+        validators.len() as u16,
         validators,
     )
     .context("Failed to build validators list")?;

@@ -48,7 +48,8 @@ pub struct NetworkConfig {
     pub consensus_params: ConsensusParams,
     #[serde(with = "serde_vec_uint256")]
     pub fundamental_addresses: Vec<ton_types::UInt256>,
-    pub validator_set: ValidatorSet,
+    #[serde(with = "serde_vec_uint256")]
+    pub validators_public_keys: Vec<ton_types::UInt256>,
 }
 
 #[derive(Deserialize)]
@@ -245,24 +246,6 @@ pub struct ConsensusParams {
     pub catchain_max_deps: u32,
     pub max_block_bytes: u32,
     pub max_collated_bytes: u32,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ValidatorSet {
-    pub validators: Vec<ValidatorSetEntry>,
-    pub utime_since: u32,
-    pub utime_until: u32,
-    pub main: u16,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ValidatorSetEntry {
-    #[serde(with = "serde_hex_array")]
-    pub public_key: [u8; 32],
-    #[serde(with = "serde_amount")]
-    pub weight: u64,
 }
 
 mod serde_account_states {
