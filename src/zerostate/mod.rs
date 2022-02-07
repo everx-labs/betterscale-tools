@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use nekoton_utils::*;
 use num_bigint::BigInt;
 use serde::Deserialize;
-use ton_block::{AddSub, HashmapAugType, Serializable};
+use ton_block::{AddSub, Serializable};
 
 use self::system_accounts::*;
 use crate::ed25519::*;
@@ -121,8 +121,9 @@ pub fn prepare_zerostates<P: AsRef<Path>>(
 }
 
 fn prepare_mc_zerostate(config: &str, pubkey: PublicKey) -> Result<ton_block::ShardStateUnsplit> {
-    let mut data =
-        serde_json::from_str::<ZerostateConfig>(config).context("Failed to parse state config")?;
+    let jd = &mut serde_json::Deserializer::from_str(config);
+    let mut data = serde_path_to_error::deserialize::<_, ZerostateConfig>(jd)
+        .context("Failed to parse state config")?;
 
     let mut state = ton_block::ShardStateUnsplit::with_ident(ton_block::ShardIdent::masterchain());
     let mut ex = ton_block::McStateExtra::default();
@@ -156,6 +157,24 @@ fn prepare_mc_zerostate(config: &str, pubkey: PublicKey) -> Result<ton_block::Sh
                     .context("Failed to create shard account")?,
             )
             .context("Failed to insert account")?;
+    }
+
+    for validator in &data.config.validator_set.validators {
+        let pubkey = match PublicKey::from_bytes(validator.public_key) {
+            Some(pubkey) => pubkey,
+            None => continue,
+        };
+
+        let (address, account) = build_validator_wallet(pubkey, validator.initial_balance)
+            .context("Failed to build validator wallet")?;
+
+        state
+            .insert_account(
+                &address,
+                &ton_block::ShardAccount::with_params(&account, ton_types::UInt256::default(), 0)
+                    .context("Failed to create shard account")?,
+            )
+            .context("Failed to insert validator account")?;
     }
 
     state.set_min_ref_mc_seqno(u32::MAX);
@@ -788,6 +807,8 @@ struct ValidatorSetEntry {
     public_key: [u8; 32],
     #[serde(with = "serde_amount")]
     weight: u64,
+    #[serde(with = "serde_amount")]
+    initial_balance: u64,
 }
 
 mod serde_account_states {

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use ton_block::{GetRepresentationHash, Serializable};
 use ton_types::IBitstring;
 
 use crate::ed25519::*;
@@ -57,10 +58,10 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
         .context("Failed to read elector code")?;
 
     let mut data = ton_types::BuilderData::new();
-    data.append_bits(0, 3).unwrap(); // empty dict, empty dict, empty dict
-    data.append_bits(0, 4).unwrap(); // grams
-    data.append_bits(0, 32).unwrap(); // uint32
-    data.append_raw(&[0; 32], 256).unwrap(); // uint256
+    data.append_bits(0, 3)?; // empty dict, empty dict, empty dict
+    data.append_bits(0, 4)?; // grams
+    data.append_bits(0, 32)?; // uint32
+    data.append_raw(&[0; 32], 256)?; // uint256
 
     let mut account = ton_block::Account::Account(ton_block::AccountStuff {
         addr: address,
@@ -90,14 +91,106 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
     Ok(account)
 }
 
+pub fn build_validator_wallet(
+    pubkey: PublicKey,
+    balance: u64,
+) -> Result<(ton_types::UInt256, ton_block::Account)> {
+    let code = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(MULTISIG_CODE))
+        .context("Failed to read multisig code")?;
+
+    // Compute address
+    let mut init_params = ton_types::HashmapE::with_bit_len(64);
+    init_params.set(
+        0u64.serialize()?.into(),
+        &ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
+    )?;
+    init_params.set(8u64.serialize()?.into(), &{
+        let mut map = ton_types::HashmapE::with_bit_len(64);
+        map.set(0u64.serialize()?.into(), &Default::default())?;
+        map.serialize()?.into()
+    })?;
+
+    let mut state_init = ton_block::StateInit {
+        code: Some(code),
+        data: Some(init_params.serialize()?),
+        ..Default::default()
+    };
+    let address = state_init
+        .hash()
+        .context("Failed to serialize state init")?;
+
+    // Build data
+    let mut data = ton_types::BuilderData::new();
+    data.append_raw(pubkey.as_bytes(), 256)?; // pubkey
+    data.append_u64(0)?; // time
+    data.append_bit_one()?; // constructor flag
+
+    data.append_raw(pubkey.as_bytes(), 256)?; // m_ownerKey
+    data.append_raw(&[0; 32], 256)?; // m_requestsMask
+
+    data.append_u8(1)?; // m_custodianCount
+    data.append_u8(1)?; // m_defaultRequiredConfirmations
+
+    data.append_bit_zero()?; // empty m_transactions
+
+    let mut custodians = ton_types::HashmapE::with_bit_len(256);
+    custodians.set(
+        ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
+        &ton_types::SliceData::from_raw(vec![0], 8),
+    )?;
+    custodians.write_to(&mut data)?; // m_custodians
+
+    // "Deploy" wallet
+    state_init.data = Some(data.into_cell()?);
+
+    // Done
+    let mut account = ton_block::Account::Account(ton_block::AccountStuff {
+        addr: make_address(address).context("Failed to create validator address")?,
+        storage_stat: Default::default(),
+        storage: ton_block::AccountStorage {
+            last_trans_lt: 0,
+            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams::from(balance)),
+            state: ton_block::AccountState::AccountActive {
+                init_code_hash: None,
+                state_init,
+            },
+        },
+    });
+    account
+        .update_storage_stat()
+        .context("Failed to update storage stat")?;
+
+    Ok((address, account))
+}
+
 fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt> {
-    ton_block::MsgAddressInt::with_standart(
-        None,
-        -1,
-        ton_types::SliceData::from_raw(address.as_slice().to_vec(), 256),
-    )
-    .context("Failed to create address")
+    ton_block::MsgAddressInt::with_standart(None, -1, address.into())
+        .context("Failed to create address")
 }
 
 static CONFIG_CODE: &[u8] = include_bytes!("config_code.boc");
 static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
+static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn check_validator_address() {
+        let pubkey =
+            hex::decode("1161f67ca580dd2b9935967b04109e0e988601fc0894e145f7cd56534e817257")
+                .unwrap();
+        let pubkey = PublicKey::from_bytes(pubkey.try_into().unwrap()).unwrap();
+
+        assert_eq!(
+            build_validator_wallet(pubkey, 1000).unwrap().0,
+            ton_types::UInt256::from_str(
+                "9d98e2c829b309abebfa1d3745a62a8b11b68233a1b5d1044f6e09e380d67b97"
+            )
+            .unwrap()
+        );
+    }
+}
