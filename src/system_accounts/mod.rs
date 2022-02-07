@@ -120,7 +120,7 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
     Ok(account)
 }
 
-pub fn build_validator_wallet(
+pub fn build_multisig(
     pubkey: PublicKey,
     balance: u64,
 ) -> Result<(ton_types::UInt256, ton_block::Account)> {
@@ -219,7 +219,7 @@ mod tests {
         let pubkey = PublicKey::from_bytes(pubkey.try_into().unwrap()).unwrap();
 
         assert_eq!(
-            build_validator_wallet(pubkey, 1000).unwrap().0,
+            build_multisig(pubkey, 1000).unwrap().0,
             ton_types::UInt256::from_str(
                 "9d98e2c829b309abebfa1d3745a62a8b11b68233a1b5d1044f6e09e380d67b97"
             )
