@@ -283,7 +283,7 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     let mut workchains = ton_block::Workchains::default();
     for workchain in config.workchains {
         let mut descr = ton_block::WorkchainDescr::default();
-        descr.enabled_since = workchain.enabled_since;
+        descr.enabled_since = workchain.enabled_since.unwrap_or(data.gen_utime);
         descr
             .set_min_split(workchain.min_split)
             .context("Failed to set workchain min split")?;

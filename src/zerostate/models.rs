@@ -84,7 +84,8 @@ pub struct ConfigVotingParams {
 #[serde(deny_unknown_fields)]
 pub struct WorkchainDescription {
     pub workchain_id: u32,
-    pub enabled_since: u32,
+    #[serde(default)]
+    pub enabled_since: Option<u32>,
     pub min_split: u8,
     pub max_split: u8,
     #[serde(default)]
