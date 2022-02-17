@@ -3,10 +3,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use argh::FromArgs;
+use everscale_crypto::ed25519;
 use ton_block::Serializable;
 
 mod dht;
-mod ed25519;
 mod system_accounts;
 mod zerostate;
 
@@ -66,6 +66,21 @@ fn run(app: App) -> Result<()> {
             );
             Ok(())
         }
+        Subcommand::KeyPair(_args) => {
+            let secret = ed25519::SecretKey::generate(&mut rand::thread_rng());
+            let public = ed25519::PublicKey::from(&secret);
+
+            let json = serde_json::json!({
+                "secret": hex::encode(secret.as_bytes()),
+                "public": hex::encode(public.as_bytes()),
+            });
+
+            print!(
+                "{}",
+                serde_json::to_string_pretty(&json).expect("Shouldn't fail")
+            );
+            Ok(())
+        }
     }
 }
 
@@ -82,6 +97,7 @@ enum Subcommand {
     DhtNode(CmdDhtNode),
     ZeroState(CmdZeroState),
     Account(CmdAccount),
+    KeyPair(CmdKeyPair),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -122,6 +138,11 @@ struct CmdAccount {
     #[argh(option, long = "balance", short = 'b')]
     balance: u64,
 }
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates ed25519 key pair
+#[argh(subcommand, name = "keypair")]
+struct CmdKeyPair {}
 
 fn hex_or_base64<const N: usize>(data: &str) -> Result<[u8; N]> {
     match hex::decode(data) {

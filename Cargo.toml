@@ -12,6 +12,7 @@ anyhow = "1.0"
 argh = "0.1"
 base64 = "0.13"
 curve25519-dalek-ng = "4.1"
+everscale-crypto = "0.0.1"
 generic-array = { version = "0.14", features = ["more_lengths"] }
 hex = "0.4"
 num-bigint = "0.3"

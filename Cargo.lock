@@ -57,6 +57,7 @@ dependencies = [
  "argh",
  "base64",
  "curve25519-dalek-ng",
+ "everscale-crypto",
  "generic-array",
  "hex",
  "nekoton-utils",
@@ -180,6 +181,20 @@ dependencies = [
  "serde",
  "sha2",
  "zeroize",
+]
+
+[[package]]
+name = "everscale-crypto"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7eca099ec27b1d6b530a00efb89c530310455597d9211c506607afc2a0288a06"
+dependencies = [
+ "curve25519-dalek-ng",
+ "generic-array",
+ "hex",
+ "rand",
+ "sha2",
+ "tl-proto",
 ]
 
 [[package]]
@@ -552,9 +567,9 @@ dependencies = [
 
 [[package]]
 name = "tl-proto"
-version = "0.1.6"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb51a38d97df086b5669deae304e6fe873a821678cd6480fb7479dfba3c2613d"
+checksum = "fbe2b57629d1de1def0c8ac25dccf018d7c849b8bb1d5c340282def897d8d31d"
 dependencies = [
  "bytes",
  "digest",
@@ -565,9 +580,9 @@ dependencies = [
 
 [[package]]
 name = "tl-proto-proc"
-version = "0.1.6"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81288c798f7b4f34c3cb2c9ffa1a050e48d5f81cfcdcfca7652a216d5e4062db"
+checksum = "ee3da8c5a94bd640548d8a35d6e30f2ce49666648eabceae5477192efc497ccb"
 dependencies = [
  "proc-macro2",
  "quote",
