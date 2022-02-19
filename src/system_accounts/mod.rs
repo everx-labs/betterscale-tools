@@ -21,18 +21,6 @@ pub fn build_minter(pubkey: PublicKey) -> Result<ton_block::Account> {
     Ok(account)
 }
 
-pub fn build_tick_tock() -> Result<(ton_types::UInt256, ton_block::Account)> {
-    let account = ton_block::Account::construct_from_bytes(TICK_TOCK_STATE)?;
-
-    let address = account
-        .state_init()
-        .context("Empty tick tock account")?
-        .hash()
-        .context("Failed to compute tick tock hash")?;
-
-    Ok((address, account))
-}
-
 pub fn build_config_state(
     address: ton_types::UInt256,
     pubkey: PublicKey,
@@ -199,7 +187,6 @@ fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt>
 
 static CONFIG_CODE: &[u8] = include_bytes!("config_code.boc");
 static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
-static TICK_TOCK_STATE: &[u8] = include_bytes!("tick_tock_state.boc");
 static MINTER_STATE: &[u8] = include_bytes!("minter_state.boc");
 
 static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");

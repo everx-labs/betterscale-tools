@@ -131,9 +131,6 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
         build_minter(minter_public_key).context("Failed to build minter state")?,
     );
 
-    let (tick_tock_address, tick_tock) = build_tick_tock().context("Failed to build tick tock")?;
-    data.accounts.insert(tick_tock_address, tick_tock);
-
     data.accounts.insert(
         data.config.config_address,
         build_config_state(data.config.config_address, config_public_key)
