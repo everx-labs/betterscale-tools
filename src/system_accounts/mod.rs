@@ -108,9 +108,31 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
     Ok(account)
 }
 
+pub fn build_giver(balance: u128) -> Result<(ton_types::UInt256, ton_block::Account)> {
+    let mut account = ton_block::Account::construct_from_bytes(GIVER_STATE)
+        .context("Failed to read giver state")?;
+
+    // Compute address
+    let address = account
+        .state_init()
+        .expect("Shouldn't fail")
+        .hash()
+        .context("Failed to serialize state init")?;
+
+    account.set_balance(ton_block::CurrencyCollection::from_grams(ton_block::Grams(
+        balance,
+    )));
+
+    account
+        .update_storage_stat()
+        .context("Failed to update storage stat")?;
+
+    Ok((address, account))
+}
+
 pub fn build_multisig(
     pubkey: PublicKey,
-    balance: u64,
+    balance: u128,
 ) -> Result<(ton_types::UInt256, ton_block::Account)> {
     let code = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(MULTISIG_CODE))
         .context("Failed to read multisig code")?;
@@ -166,7 +188,7 @@ pub fn build_multisig(
         storage_stat: Default::default(),
         storage: ton_block::AccountStorage {
             last_trans_lt: 0,
-            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams::from(balance)),
+            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
             state: ton_block::AccountState::AccountActive {
                 init_code_hash: None,
                 state_init,
@@ -188,7 +210,7 @@ fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt>
 static CONFIG_CODE: &[u8] = include_bytes!("config_code.boc");
 static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
 static MINTER_STATE: &[u8] = include_bytes!("minter_state.boc");
-
+static GIVER_STATE: &[u8] = include_bytes!("giver_state.boc");
 static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");
 
 #[cfg(test)]

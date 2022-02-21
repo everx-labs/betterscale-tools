@@ -43,13 +43,17 @@ fn run(app: App) -> Result<()> {
             Ok(())
         }
         Subcommand::Account(args) => {
-            let pubkey = hex_or_base64(args.pubkey.trim())
-                .ok()
-                .and_then(ed25519::PublicKey::from_bytes)
-                .context("Invalid public key")?;
-
-            let (address, account) = system_accounts::build_multisig(pubkey, args.balance)
-                .context("Failed to build account")?;
+            let (address, account) = match args.subcommand {
+                AccountSubcommand::Giver(args) => system_accounts::build_giver(args.balance),
+                AccountSubcommand::Multisig(args) => {
+                    let pubkey = hex_or_base64(args.pubkey.trim())
+                        .ok()
+                        .and_then(ed25519::PublicKey::from_bytes)
+                        .context("Invalid public key")?;
+                    system_accounts::build_multisig(pubkey, args.balance)
+                }
+            }
+            .context("Failed to build account")?;
 
             let cell = account.serialize().context("Failed to serialize account")?;
             let boc =
@@ -127,16 +131,40 @@ struct CmdZeroState {
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
-/// Generates multisig account zerostate entry
+/// Account state creation tools
 #[argh(subcommand, name = "account")]
 struct CmdAccount {
+    #[argh(subcommand)]
+    subcommand: AccountSubcommand,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+#[argh(subcommand)]
+enum AccountSubcommand {
+    Giver(CmdAccountGiver),
+    Multisig(CmdAccountMultisig),
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates giver account zerostate entry
+#[argh(subcommand, name = "giver")]
+struct CmdAccountGiver {
+    /// account balance in nano evers
+    #[argh(option, long = "balance", short = 'b')]
+    balance: u128,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates multisig account zerostate entry
+#[argh(subcommand, name = "multisig")]
+struct CmdAccountMultisig {
     /// account public key
     #[argh(option, long = "pubkey", short = 's')]
     pubkey: String,
 
     /// account balance in nano evers
     #[argh(option, long = "balance", short = 'b')]
-    balance: u64,
+    balance: u128,
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
