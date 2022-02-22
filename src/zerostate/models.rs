@@ -265,8 +265,19 @@ mod serde_account_states {
         map.into_iter()
             .map(|(key, value)| {
                 let address = ton_types::UInt256::from_str(&key).map_err(D::Error::custom)?;
-                let state =
+
+                let mut state =
                     ton_block::Account::construct_from_base64(&value).map_err(D::Error::custom)?;
+
+                if let ton_block::Account::Account(stuff) = &mut state {
+                    stuff.addr =
+                        ton_block::MsgAddressInt::AddrStd(ton_block::MsgAddrStd::with_address(
+                            None,
+                            ton_block::MASTERCHAIN_ID as i8,
+                            address.into(),
+                        ));
+                }
+
                 Ok((address, state))
             })
             .collect()

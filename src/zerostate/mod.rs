@@ -126,21 +126,21 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     let mut state = ton_block::ShardStateUnsplit::with_ident(ton_block::ShardIdent::masterchain());
     let mut ex = ton_block::McStateExtra::default();
 
-    data.accounts.insert(
+    data.add_account(
         Default::default(),
         build_minter(minter_public_key).context("Failed to build minter state")?,
-    );
+    )?;
 
-    data.accounts.insert(
+    data.add_account(
         data.config.config_address,
         build_config_state(data.config.config_address, config_public_key)
             .context("Failed to build config state")?,
-    );
+    )?;
 
-    data.accounts.insert(
+    data.add_account(
         data.config.elector_address,
         build_elector_state(data.config.elector_address).context("Failed to build config state")?,
-    );
+    )?;
 
     let mut total_balance = ton_block::CurrencyCollection::default();
     for (address, account) in data.accounts {
@@ -534,4 +534,28 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
         .context("Failed to write McStateExtra")?;
 
     Ok(state)
+}
+
+impl ZerostateConfig {
+    pub fn add_account(
+        &mut self,
+        address: ton_types::UInt256,
+        mut account: ton_block::Account,
+    ) -> Result<()> {
+        if let ton_block::Account::Account(account) = &mut account {
+            account.addr = ton_block::MsgAddressInt::AddrStd(ton_block::MsgAddrStd::with_address(
+                None,
+                ton_block::MASTERCHAIN_ID as i8,
+                address.into(),
+            ));
+        }
+
+        account
+            .update_storage_stat()
+            .context("Failed to update storage stat for explicit account")?;
+
+        self.accounts.insert(address, account);
+
+        Ok(())
+    }
 }
