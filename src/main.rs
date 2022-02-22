@@ -46,11 +46,16 @@ fn run(app: App) -> Result<()> {
             let (address, account) = match args.subcommand {
                 AccountSubcommand::Giver(args) => system_accounts::build_giver(args.balance),
                 AccountSubcommand::Multisig(args) => {
-                    let pubkey = hex_or_base64(args.pubkey.trim())
-                        .ok()
-                        .and_then(ed25519::PublicKey::from_bytes)
-                        .context("Invalid public key")?;
-                    system_accounts::build_multisig(pubkey, args.balance)
+                    system_accounts::MultisigBuilder::new(parse_public_key(args.pubkey)?)
+                        .custodians(
+                            args.custodians
+                                .into_iter()
+                                .map(parse_public_key)
+                                .collect::<Result<Vec<_>>>()?,
+                        )
+                        .required_confirms(args.required_confirms)
+                        .upgradable(args.upgradable)
+                        .build(args.balance)
                 }
             }
             .context("Failed to build account")?;
@@ -159,10 +164,22 @@ struct CmdAccountGiver {
 #[argh(subcommand, name = "multisig")]
 struct CmdAccountMultisig {
     /// account public key
-    #[argh(option, long = "pubkey", short = 's')]
+    #[argh(option, long = "pubkey", short = 'p')]
     pubkey: String,
 
-    /// account balance in nano evers
+    /// a list of custodians. `pubkey` is used if no custodians have been specified
+    #[argh(option, long = "custodian", short = 'c')]
+    custodians: Vec<String>,
+
+    /// number of confirmations required to execute a transaction
+    #[argh(option, long = "req-confirms", short = 'r')]
+    required_confirms: Option<u8>,
+
+    /// whether contract code can be changed in future
+    #[argh(switch, long = "upgradable", short = 'u')]
+    upgradable: bool,
+
+    /// account balance in nano EVER
     #[argh(option, long = "balance", short = 'b')]
     balance: u128,
 }
@@ -171,6 +188,13 @@ struct CmdAccountMultisig {
 /// Generates ed25519 key pair
 #[argh(subcommand, name = "keypair")]
 struct CmdKeyPair {}
+
+fn parse_public_key(data: impl AsRef<str>) -> Result<ed25519::PublicKey> {
+    hex_or_base64(data.as_ref().trim())
+        .ok()
+        .and_then(ed25519::PublicKey::from_bytes)
+        .context("Invalid public key")
+}
 
 fn hex_or_base64<const N: usize>(data: &str) -> Result<[u8; N]> {
     match hex::decode(data) {

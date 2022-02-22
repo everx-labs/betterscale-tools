@@ -130,76 +130,145 @@ pub fn build_giver(balance: u128) -> Result<(ton_types::UInt256, ton_block::Acco
     Ok((address, account))
 }
 
-pub fn build_multisig(
+pub struct MultisigBuilder {
     pubkey: PublicKey,
-    balance: u128,
-) -> Result<(ton_types::UInt256, ton_block::Account)> {
-    let code = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(MULTISIG_CODE))
-        .context("Failed to read multisig code")?;
+    custodians: Vec<PublicKey>,
+    required_confirms: Option<u8>,
+    upgradable: bool,
+}
 
-    // Compute address
-    let mut init_params = ton_types::HashmapE::with_bit_len(64);
-    init_params.set(
-        0u64.serialize()?.into(),
-        &ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
-    )?;
-    init_params.set(8u64.serialize()?.into(), &{
-        let mut map = ton_types::HashmapE::with_bit_len(64);
-        map.set(0u64.serialize()?.into(), &Default::default())?;
-        map.serialize()?.into()
-    })?;
+impl MultisigBuilder {
+    pub fn new(pubkey: PublicKey) -> Self {
+        Self {
+            pubkey,
+            custodians: Vec::new(),
+            required_confirms: None,
+            upgradable: false,
+        }
+    }
 
-    let mut state_init = ton_block::StateInit {
-        code: Some(code),
-        data: Some(init_params.serialize()?),
-        ..Default::default()
-    };
-    let address = state_init
-        .hash()
-        .context("Failed to serialize state init")?;
+    pub fn custodians(mut self, custodians: Vec<PublicKey>) -> Self {
+        self.custodians = custodians;
+        self
+    }
 
-    // Build data
-    let mut data = ton_types::BuilderData::new();
-    data.append_raw(pubkey.as_bytes(), 256)?; // pubkey
-    data.append_u64(0)?; // time
-    data.append_bit_one()?; // constructor flag
+    pub fn required_confirms(mut self, required_confirms: Option<u8>) -> Self {
+        self.required_confirms = required_confirms;
+        self
+    }
 
-    data.append_raw(pubkey.as_bytes(), 256)?; // m_ownerKey
-    data.append_raw(&[0; 32], 256)?; // m_requestsMask
+    pub fn upgradable(mut self, upgradable: bool) -> Self {
+        self.upgradable = upgradable;
+        self
+    }
 
-    data.append_u8(1)?; // m_custodianCount
-    data.append_u8(1)?; // m_defaultRequiredConfirmations
+    pub fn build(mut self, balance: u128) -> Result<(ton_types::UInt256, ton_block::Account)> {
+        let code =
+            ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(if self.upgradable {
+                SETCODE_MULTISIG_CODE
+            } else {
+                MULTISIG_CODE
+            }))
+            .context("Failed to read multisig code")?;
 
-    data.append_bit_zero()?; // empty m_transactions
+        let custodian_count = match self.custodians.len() {
+            0 => {
+                self.custodians.push(self.pubkey);
+                1 // set deployer as the single custodian
+            }
+            len if len <= 32 => len as u8,
+            _ => return Err(anyhow::anyhow!("Too many custodians")),
+        };
 
-    let mut custodians = ton_types::HashmapE::with_bit_len(256);
-    custodians.set(
-        ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
-        &ton_types::SliceData::from_raw(vec![0], 8),
-    )?;
-    custodians.write_to(&mut data)?; // m_custodians
+        // All confirmations are required if it wasn't explicitly specified
+        let required_confirms = self.required_confirms.unwrap_or(custodian_count);
 
-    // "Deploy" wallet
-    state_init.data = Some(data.into_cell()?);
+        // Compute address
+        let mut init_params = ton_types::HashmapE::with_bit_len(64);
+        init_params.set(
+            0u64.serialize()?.into(),
+            &ton_types::SliceData::from_raw(self.pubkey.as_bytes().to_vec(), 256),
+        )?;
+        init_params.set(8u64.serialize()?.into(), &{
+            let mut map = ton_types::HashmapE::with_bit_len(64);
+            map.set(0u64.serialize()?.into(), &Default::default())?;
+            map.serialize()?.into()
+        })?;
 
-    // Done
-    let mut account = ton_block::Account::Account(ton_block::AccountStuff {
-        addr: make_address(address).context("Failed to create validator address")?,
-        storage_stat: Default::default(),
-        storage: ton_block::AccountStorage {
-            last_trans_lt: 0,
-            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
-            state: ton_block::AccountState::AccountActive {
-                init_code_hash: None,
-                state_init,
+        let mut state_init = ton_block::StateInit {
+            code: Some(code),
+            data: Some(init_params.serialize()?),
+            ..Default::default()
+        };
+        let address = state_init
+            .hash()
+            .context("Failed to serialize state init")?;
+
+        // Build data
+        let mut data = ton_types::BuilderData::new();
+        data.append_raw(self.pubkey.as_bytes(), 256)?; // pubkey
+        data.append_u64(0)?; // time
+        data.append_bit_one()?; // constructor flag
+
+        data.append_raw(
+            self.custodians.first().unwrap_or(&self.pubkey).as_bytes(),
+            256,
+        )?; // m_ownerKey
+        data.append_raw(&[0; 32], 256)?; // m_requestsMask
+
+        data.append_u8(custodian_count)?; // m_custodianCount
+
+        if self.upgradable {
+            let required_votes = if custodian_count <= 2 {
+                custodian_count
+            } else {
+                (custodian_count * 2 + 1) / 3
+            };
+
+            data.append_u32(0)?; // m_updateRequestsMask
+            data.append_u8(required_votes)?; // m_requiredVotes
+
+            let mut updates = ton_types::BuilderData::new();
+            updates.append_bit_zero()?; // empty m_updateRequests
+
+            data.append_reference_cell(updates.into_cell()?); // sub reference
+        }
+
+        data.append_u8(std::cmp::min(required_confirms, custodian_count))?; // m_defaultRequiredConfirmations
+
+        data.append_bit_zero()?; // empty m_transactions
+
+        let mut custodians = ton_types::HashmapE::with_bit_len(256);
+        for (i, pubkey) in self.custodians.into_iter().enumerate() {
+            custodians.set(
+                ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
+                &ton_types::SliceData::from_raw(vec![i as u8], 8),
+            )?;
+        }
+        custodians.write_to(&mut data)?; // m_custodians
+
+        // "Deploy" wallet
+        state_init.data = Some(data.into_cell()?);
+
+        // Done
+        let mut account = ton_block::Account::Account(ton_block::AccountStuff {
+            addr: make_address(address).context("Failed to create validator address")?,
+            storage_stat: Default::default(),
+            storage: ton_block::AccountStorage {
+                last_trans_lt: 0,
+                balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
+                state: ton_block::AccountState::AccountActive {
+                    init_code_hash: None,
+                    state_init,
+                },
             },
-        },
-    });
-    account
-        .update_storage_stat()
-        .context("Failed to update storage stat")?;
+        });
+        account
+            .update_storage_stat()
+            .context("Failed to update storage stat")?;
 
-    Ok((address, account))
+        Ok((address, account))
+    }
 }
 
 fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt> {
@@ -212,6 +281,7 @@ static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
 static MINTER_STATE: &[u8] = include_bytes!("minter_state.boc");
 static GIVER_STATE: &[u8] = include_bytes!("giver_state.boc");
 static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");
+static SETCODE_MULTISIG_CODE: &[u8] = include_bytes!("setcode_multisig_code.boc");
 
 #[cfg(test)]
 mod tests {
