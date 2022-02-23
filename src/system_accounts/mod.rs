@@ -286,19 +286,23 @@ static SETCODE_MULTISIG_CODE: &[u8] = include_bytes!("setcode_multisig_code.boc"
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    use ton_block::HashmapAugType;
 
     use super::*;
 
-    #[test]
-    fn check_validator_address() {
-        let pubkey =
+    fn test_pubkey() -> PublicKey {
+        PublicKey::from_bytes(
             hex::decode("1161f67ca580dd2b9935967b04109e0e988601fc0894e145f7cd56534e817257")
-                .unwrap();
-        let pubkey = PublicKey::from_bytes(pubkey.try_into().unwrap()).unwrap();
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        )
+        .unwrap()
+    }
 
+    #[test]
+    fn check_safe_multisig_address() {
         assert_eq!(
-            build_multisig(pubkey, 1000).unwrap().0,
+            MultisigBuilder::new(test_pubkey()).build(1000).unwrap().0,
             ton_types::UInt256::from_str(
                 "9d98e2c829b309abebfa1d3745a62a8b11b68233a1b5d1044f6e09e380d67b97"
             )
@@ -307,13 +311,17 @@ mod tests {
     }
 
     #[test]
-    fn check_tick_tock_address() {
+    fn check_setcode_multisig_address() {
         assert_eq!(
-            build_tick_tock().unwrap().0,
+            MultisigBuilder::new(test_pubkey())
+                .upgradable(true)
+                .build(1000)
+                .unwrap()
+                .0,
             ton_types::UInt256::from_str(
-                "04f64c6afbff3dd10d8ba6707790ac9670d540f37a9448b0337baa6a5a92acac"
+                "216fe0928d90f103434f9fb826dd66a405e42e92660598496912499a199bbfe5"
             )
             .unwrap()
-        );
+        )
     }
 }
