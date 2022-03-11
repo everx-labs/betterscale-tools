@@ -25,16 +25,22 @@ pub async fn set_param(
     secret: &ed25519::SecretKey,
     param: ParamToChange,
 ) -> Result<()> {
-    let mut config = ConfigContract::subscribe(url, config)
+    ConfigContract::subscribe(url, config)
+        .await?
+        .execute_action(secret, Action::SubmitParam(param.into_param()?))
         .await
-        .context("Failed to create config contract")?;
+}
 
-    let action = Action::SubmitParam(param.into_param().context("Failed to build param")?);
-
-    config
-        .execute_action(secret, action)
+pub async fn set_master_key(
+    url: String,
+    config: &ton_block::MsgAddressInt,
+    secret: &ed25519::SecretKey,
+    master_key: ed25519::PublicKey,
+) -> Result<()> {
+    ConfigContract::subscribe(url, config)
+        .await?
+        .execute_action(secret, Action::UpdateMasterKey(master_key))
         .await
-        .context("Failed to execute action")
 }
 
 #[derive(Deserialize)]
@@ -87,9 +93,10 @@ impl ParamToChange {
 }
 
 struct ConfigContract {
+    address: ton_block::MsgAddressInt,
     transport: Arc<dyn Transport>,
-    subscription: GenericContract,
     handler: Arc<ConfigContractHandler>,
+    subscription: Arc<tokio::sync::Mutex<GenericContract>>,
 }
 
 impl ConfigContract {
@@ -99,41 +106,57 @@ impl ConfigContract {
         let clock = Arc::new(SimpleClock);
         let handler = Arc::new(ConfigContractHandler::default());
 
-        let subscription =
+        let subscription = Arc::new(tokio::sync::Mutex::new(
             GenericContract::subscribe(clock, transport.clone(), address.clone(), handler.clone())
                 .await
-                .context("Failed to create config contract subscription")?;
+                .context("Failed to create config contract subscription")?,
+        ));
+
+        tokio::spawn({
+            let subscription = subscription.clone();
+            async move {
+                loop {
+                    if let Err(e) = subscription.lock().await.refresh().await {
+                        eprintln!("Failed to update config subscription: {:?}", e);
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        });
 
         Ok(Self {
+            address: address.clone(),
             transport,
-            subscription,
             handler,
+            subscription,
         })
     }
 
-    async fn execute_action(&mut self, secret: &ed25519::SecretKey, action: Action) -> Result<()> {
+    async fn execute_action(&self, secret: &ed25519::SecretKey, action: Action) -> Result<()> {
         let seqno = self
             .check_state(Some(ed25519::PublicKey::from(secret)))
             .await?;
 
-        let (message, expire_at) = create_message(
-            seqno,
-            self.subscription.address(),
-            action,
-            ed25519::KeyPair::from(secret),
-        )
-        .context("Failed to create action message")?;
+        let (message, expire_at) =
+            create_message(seqno, &self.address, action, ed25519::KeyPair::from(secret))
+                .context("Failed to create action message")?;
 
-        self.send_message(message, expire_at).await
+        self.send_message(message, expire_at)
+            .await
+            .context("Failed to execute action")
     }
 
-    async fn send_message(&mut self, message: ton_block::Message, expire_at: u32) -> Result<()> {
+    async fn send_message(&self, message: ton_block::Message, expire_at: u32) -> Result<()> {
         let message_hash = message.serialize()?.repr_hash();
 
         let (tx, rx) = oneshot::channel();
         self.handler.0.lock().insert(message_hash, tx);
 
-        self.subscription.send(&message, expire_at).await?;
+        self.subscription
+            .lock()
+            .await
+            .send(&message, expire_at)
+            .await?;
 
         if rx.await.context("Sender dropped")? {
             Ok(())
@@ -143,8 +166,7 @@ impl ConfigContract {
     }
 
     async fn check_state(&self, required_public: Option<ed25519::PublicKey>) -> Result<u32> {
-        let address = self.subscription.address();
-        let config_state = match self.transport.get_contract_state(address).await? {
+        let config_state = match self.transport.get_contract_state(&self.address).await? {
             RawContractState::Exists(contract) => contract.account,
             RawContractState::NotExists => return Err(ConfigError::ConfigNotExists.into()),
         };
@@ -243,13 +265,17 @@ fn make_client(url: String) -> Result<Arc<dyn Transport>> {
 enum Action {
     /// Param index and param value
     SubmitParam(ton_block::ConfigParamEnum),
+
     /// Config contract code
+    #[allow(unused)]
     UpdateConfigCode(ton_types::Cell),
+
     /// New config public key
-    UpdateMasterKey(ton_types::UInt256),
+    UpdateMasterKey(ed25519::PublicKey),
 
     /// First ref is elector code.
     /// Remaining data is passed to `after_code_upgrade`
+    #[allow(unused)]
     UpdateElectorCode(ton_types::SliceData),
 }
 
@@ -268,7 +294,7 @@ impl Action {
                 (0x4e436f64, data)
             }
             Self::UpdateMasterKey(key) => {
-                data.append_raw(key.as_slice(), 256).trust_me();
+                data.append_raw(key.as_bytes(), 256).trust_me();
                 (0x50624b21, data)
             }
             Self::UpdateElectorCode(code_with_params) => {

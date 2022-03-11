@@ -104,9 +104,13 @@ async fn run(app: App) -> Result<()> {
                 }))
                 .context("Invalid config param")?;
 
-                config::set_param(args.url, &args.address, &secret, param).await?;
+                config::set_param(args.url, &args.address, &secret, param).await
+            }
+            CmdConfigSubcommand::SetMasterKey(args) => {
+                let secret = load_secret_key(args.sign)?;
+                let master_key = parse_public_key(args.pubkey).context("Invalid master key")?;
 
-                Ok(())
+                config::set_master_key(args.url, &args.address, &secret, master_key).await
             }
         },
     }
@@ -221,6 +225,7 @@ struct CmdConfig {
 #[argh(subcommand)]
 enum CmdConfigSubcommand {
     SetParam(CmdConfigSetParam),
+    SetMasterKey(CmdConfigSetMasterKey),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -251,6 +256,32 @@ struct CmdConfigSetParam {
     /// param value
     #[argh(positional)]
     value: serde_json::Value,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Update master public key in the config contract
+#[argh(subcommand, name = "setMasterKey")]
+struct CmdConfigSetMasterKey {
+    /// config address
+    #[argh(
+        option,
+        long = "address",
+        short = 'a',
+        default = "default_config_address()"
+    )]
+    address: ton_block::MsgAddressInt,
+
+    /// gql endpoint address
+    #[argh(option, long = "url")]
+    url: String,
+
+    /// path to the file with keys
+    #[argh(option, long = "sign", short = 's')]
+    sign: PathBuf,
+
+    /// new master public key
+    #[argh(positional)]
+    pubkey: String,
 }
 
 fn default_config_address() -> ton_block::MsgAddressInt {
