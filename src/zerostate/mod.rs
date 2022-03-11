@@ -7,7 +7,7 @@ use self::models::*;
 use crate::ed25519::*;
 use crate::system_accounts::*;
 
-mod models;
+pub mod models;
 
 pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<String> {
     let mut mc_zerstate =
@@ -309,49 +309,28 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam14(
-            ton_block::ConfigParam14 {
-                block_create_fees: ton_block::BlockCreateFees {
-                    masterchain_block_fee: config.block_creation_fees.masterchain_block_fee.into(),
-                    basechain_block_fee: config.block_creation_fees.basechain_block_fee.into(),
-                },
-            },
+            config.block_creation_fees.build(),
         ))?;
 
     // 15
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam15(
-            ton_block::ConfigParam15 {
-                validators_elected_for: config.elector_params.validators_elected_for,
-                elections_start_before: config.elector_params.elections_start_before,
-                elections_end_before: config.elector_params.elections_end_before,
-                stake_held_for: config.elector_params.stake_held_for,
-            },
+            config.elector_params.build(),
         ))?;
 
     // 16
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam16(
-            ton_block::ConfigParam16 {
-                max_validators: ton_block::Number16(config.validator_count.max_validators),
-                max_main_validators: ton_block::Number16(
-                    config.validator_count.max_main_validators,
-                ),
-                min_validators: ton_block::Number16(config.validator_count.min_validators),
-            },
+            config.validator_count.build(),
         ))?;
 
     // 17
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam17(
-            ton_block::ConfigParam17 {
-                min_stake: config.stake_params.min_stake.into(),
-                max_stake: config.stake_params.max_stake.into(),
-                min_total_stake: config.stake_params.min_total_stake.into(),
-                max_stake_factor: config.stake_params.max_stake_factor,
-            },
+            config.stake_params.build(),
         ))?;
 
     // 18
@@ -376,78 +355,35 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
 
     // 20, 21
 
-    let make_gas_prices = |prices: GasPricesEntry| -> ton_block::GasLimitsPrices {
-        ton_block::GasLimitsPrices {
-            gas_price: prices.gas_price,
-            gas_limit: prices.gas_limit,
-            special_gas_limit: prices.special_gas_limit,
-            gas_credit: prices.gas_credit,
-            block_gas_limit: prices.block_gas_limit,
-            freeze_due_limit: prices.freeze_due_limit,
-            delete_due_limit: prices.delete_due_limit,
-            flat_gas_limit: prices.flat_gas_limit,
-            flat_gas_price: prices.flat_gas_price,
-            max_gas_threshold: 0,
-        }
-    };
-
     ex.config
-        .set_config(ton_block::ConfigParamEnum::ConfigParam20(make_gas_prices(
-            config.gas_prices.masterchain,
-        )))?;
+        .set_config(ton_block::ConfigParamEnum::ConfigParam20(
+            config.gas_prices.masterchain.build(),
+        ))?;
     ex.config
-        .set_config(ton_block::ConfigParamEnum::ConfigParam21(make_gas_prices(
-            config.gas_prices.basechain,
-        )))?;
+        .set_config(ton_block::ConfigParamEnum::ConfigParam21(
+            config.gas_prices.basechain.build(),
+        ))?;
 
     // 22, 23
 
-    let make_block_limits = |limits: BlockLimitsEntry| -> Result<ton_block::BlockLimits> {
-        let make_param_limits = |limits: BlockLimitsParam| -> Result<ton_block::ParamLimits> {
-            ton_block::ParamLimits::with_limits(
-                limits.underload,
-                limits.soft_limit,
-                limits.hard_limit,
-            )
-            .context("Failed to set block limits param")
-        };
-
-        Ok(ton_block::BlockLimits::with_limits(
-            make_param_limits(limits.bytes)?,
-            make_param_limits(limits.gas)?,
-            make_param_limits(limits.lt_delta)?,
-        ))
-    };
-
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam22(
-            make_block_limits(config.block_limits.masterchain)?,
+            config.block_limits.masterchain.build()?,
         ))?;
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam23(
-            make_block_limits(config.block_limits.basechain)?,
+            config.block_limits.basechain.build()?,
         ))?;
 
     // 24, 25
 
-    let make_msg_fwd_prices = |prices: MsgForwardPricesEntry| -> ton_block::MsgForwardPrices {
-        ton_block::MsgForwardPrices {
-            lump_price: prices.lump_price,
-            bit_price: prices.bit_price,
-            cell_price: prices.cell_price,
-            ihr_price_factor: prices.ihr_price_factor,
-            first_frac: prices.first_frac,
-            next_frac: prices.next_frac,
-        }
-    };
-
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam24(
-            make_msg_fwd_prices(config.msg_forward_prices.masterchain),
+            config.msg_forward_prices.masterchain.build(),
         ))?;
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam25(
-            make_msg_fwd_prices(config.msg_forward_prices.basechain),
+            config.msg_forward_prices.basechain.build(),
         ))?;
 
     // 28

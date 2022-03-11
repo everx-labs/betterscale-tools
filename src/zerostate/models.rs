@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use anyhow::{Context, Result};
 use nekoton_utils::*;
 use num_bigint::BigInt;
 use serde::Deserialize;
@@ -106,6 +107,17 @@ pub struct BlockCreationFees {
     pub basechain_block_fee: u64,
 }
 
+impl BlockCreationFees {
+    pub fn build(&self) -> ton_block::ConfigParam14 {
+        ton_block::ConfigParam14 {
+            block_create_fees: ton_block::BlockCreateFees {
+                masterchain_block_fee: self.masterchain_block_fee.into(),
+                basechain_block_fee: self.basechain_block_fee.into(),
+            },
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ElectorParams {
@@ -115,12 +127,33 @@ pub struct ElectorParams {
     pub stake_held_for: u32,
 }
 
+impl ElectorParams {
+    pub fn build(&self) -> ton_block::ConfigParam15 {
+        ton_block::ConfigParam15 {
+            validators_elected_for: self.validators_elected_for,
+            elections_start_before: self.elections_start_before,
+            elections_end_before: self.elections_end_before,
+            stake_held_for: self.stake_held_for,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidatorCount {
     pub min_validators: u32,
     pub max_validators: u32,
     pub max_main_validators: u32,
+}
+
+impl ValidatorCount {
+    pub fn build(&self) -> ton_block::ConfigParam16 {
+        ton_block::ConfigParam16 {
+            max_validators: ton_block::Number16(self.max_validators),
+            max_main_validators: ton_block::Number16(self.max_main_validators),
+            min_validators: ton_block::Number16(self.min_validators),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -133,6 +166,17 @@ pub struct StakeParams {
     #[serde(with = "serde_amount")]
     pub min_total_stake: u64,
     pub max_stake_factor: u32,
+}
+
+impl StakeParams {
+    pub fn build(&self) -> ton_block::ConfigParam17 {
+        ton_block::ConfigParam17 {
+            min_stake: self.min_stake.into(),
+            max_stake: self.max_stake.into(),
+            min_total_stake: self.min_total_stake.into(),
+            max_stake_factor: self.max_stake_factor,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -179,6 +223,23 @@ pub struct GasPricesEntry {
     pub flat_gas_price: u64,
 }
 
+impl GasPricesEntry {
+    pub fn build(&self) -> ton_block::GasLimitsPrices {
+        ton_block::GasLimitsPrices {
+            gas_price: self.gas_price,
+            gas_limit: self.gas_limit,
+            special_gas_limit: self.special_gas_limit,
+            gas_credit: self.gas_credit,
+            block_gas_limit: self.block_gas_limit,
+            freeze_due_limit: self.freeze_due_limit,
+            delete_due_limit: self.delete_due_limit,
+            flat_gas_limit: self.flat_gas_limit,
+            flat_gas_price: self.flat_gas_price,
+            max_gas_threshold: 0,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlockLimits {
@@ -194,12 +255,29 @@ pub struct BlockLimitsEntry {
     pub lt_delta: BlockLimitsParam,
 }
 
+impl BlockLimitsEntry {
+    pub fn build(&self) -> Result<ton_block::BlockLimits> {
+        Ok(ton_block::BlockLimits::with_limits(
+            self.bytes.build()?,
+            self.gas.build()?,
+            self.lt_delta.build()?,
+        ))
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlockLimitsParam {
     pub underload: u32,
     pub soft_limit: u32,
     pub hard_limit: u32,
+}
+
+impl BlockLimitsParam {
+    pub fn build(&self) -> Result<ton_block::ParamLimits> {
+        ton_block::ParamLimits::with_limits(self.underload, self.soft_limit, self.hard_limit)
+            .context("Failed to set block limits param")
+    }
 }
 
 #[derive(Deserialize)]
@@ -221,6 +299,19 @@ pub struct MsgForwardPricesEntry {
     pub ihr_price_factor: u32,
     pub first_frac: u16,
     pub next_frac: u16,
+}
+
+impl MsgForwardPricesEntry {
+    pub fn build(&self) -> ton_block::MsgForwardPrices {
+        ton_block::MsgForwardPrices {
+            lump_price: self.lump_price,
+            bit_price: self.bit_price,
+            cell_price: self.cell_price,
+            ihr_price_factor: self.ihr_price_factor,
+            first_frac: self.first_frac,
+            next_frac: self.next_frac,
+        }
+    }
 }
 
 #[derive(Deserialize)]

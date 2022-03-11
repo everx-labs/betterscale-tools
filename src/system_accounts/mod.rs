@@ -29,8 +29,9 @@ pub fn build_config_state(
 
     let balance = ton_block::CurrencyCollection::from_grams(500_000_000_000u64.into());
 
-    let code = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(CONFIG_CODE))
-        .context("Failed to read config code")?;
+    let mut code = CONFIG_CODE;
+    let code =
+        ton_types::deserialize_tree_of_cells(&mut code).context("Failed to read config code")?;
 
     let mut data = ton_types::BuilderData::new();
     data.append_reference(ton_types::BuilderData::default());
@@ -71,8 +72,9 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
 
     let balance = ton_block::CurrencyCollection::from_grams(500_000_000_000u64.into());
 
-    let code = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(ELECTOR_CODE))
-        .context("Failed to read elector code")?;
+    let mut code = ELECTOR_CODE;
+    let code =
+        ton_types::deserialize_tree_of_cells(&mut code).context("Failed to read elector code")?;
 
     let mut data = ton_types::BuilderData::new();
     data.append_bits(0, 3)?; // empty dict, empty dict, empty dict
@@ -163,13 +165,12 @@ impl MultisigBuilder {
     }
 
     pub fn build(mut self, balance: u128) -> Result<(ton_types::UInt256, ton_block::Account)> {
-        let code =
-            ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(if self.upgradable {
-                SETCODE_MULTISIG_CODE
-            } else {
-                MULTISIG_CODE
-            }))
-            .context("Failed to read multisig code")?;
+        let code = ton_types::deserialize_tree_of_cells(&mut if self.upgradable {
+            SETCODE_MULTISIG_CODE
+        } else {
+            MULTISIG_CODE
+        })
+        .context("Failed to read multisig code")?;
 
         let custodian_count = match self.custodians.len() {
             0 => {

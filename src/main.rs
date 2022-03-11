@@ -1,23 +1,27 @@
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use argh::FromArgs;
 use everscale_crypto::ed25519;
+use nekoton_utils::*;
 use ton_block::Serializable;
 
+mod config;
 mod dht;
 mod system_accounts;
 mod zerostate;
 
-fn main() {
-    if let Err(e) = run(argh::from_env()) {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run(argh::from_env()).await {
         eprintln!("{:?}", e);
         std::process::exit(1);
     }
 }
 
-fn run(app: App) -> Result<()> {
+async fn run(app: App) -> Result<()> {
     match app.command {
         Subcommand::DhtNode(args) => {
             let secret = hex_or_base64(args.secret.trim())
@@ -90,6 +94,21 @@ fn run(app: App) -> Result<()> {
             );
             Ok(())
         }
+        Subcommand::Config(args) => match args.subcommand {
+            CmdConfigSubcommand::SetParam(args) => {
+                let secret = load_secret_key(args.sign)?;
+
+                let param = serde_json::from_value(serde_json::json!({
+                    "param": args.param,
+                    "value": args.value,
+                }))
+                .context("Invalid config param")?;
+
+                config::set_param(args.url, &args.address, &secret, param).await?;
+
+                Ok(())
+            }
+        },
     }
 }
 
@@ -107,6 +126,7 @@ enum Subcommand {
     ZeroState(CmdZeroState),
     Account(CmdAccount),
     KeyPair(CmdKeyPair),
+    Config(CmdConfig),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -188,6 +208,68 @@ struct CmdAccountMultisig {
 /// Generates ed25519 key pair
 #[argh(subcommand, name = "keypair")]
 struct CmdKeyPair {}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Network config tools
+#[argh(subcommand, name = "config")]
+struct CmdConfig {
+    #[argh(subcommand)]
+    subcommand: CmdConfigSubcommand,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+#[argh(subcommand)]
+enum CmdConfigSubcommand {
+    SetParam(CmdConfigSetParam),
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Execute an action to change a config param
+#[argh(subcommand, name = "setParam")]
+struct CmdConfigSetParam {
+    /// config address
+    #[argh(
+        option,
+        long = "address",
+        short = 'a',
+        default = "default_config_address()"
+    )]
+    address: ton_block::MsgAddressInt,
+
+    /// gql endpoint address
+    #[argh(option, long = "url")]
+    url: String,
+
+    /// path to the file with keys
+    #[argh(option, long = "sign", short = 's')]
+    sign: PathBuf,
+
+    /// param name
+    #[argh(positional)]
+    param: String,
+
+    /// param value
+    #[argh(positional)]
+    value: serde_json::Value,
+}
+
+fn default_config_address() -> ton_block::MsgAddressInt {
+    ton_block::MsgAddressInt::from_str(
+        "-1:5555555555555555555555555555555555555555555555555555555555555555",
+    )
+    .expect("Shouldn't fail")
+}
+
+fn load_secret_key(path: PathBuf) -> Result<ed25519::SecretKey> {
+    #[derive(serde::Deserialize)]
+    struct Content {
+        #[serde(with = "serde_hex_array")]
+        secret: [u8; 32],
+    }
+    let data = std::fs::read_to_string(path).context("Failed to load keys")?;
+    let Content { secret } = serde_json::from_str(&data).context("Invalid keys")?;
+    Ok(ed25519::SecretKey::from_bytes(secret))
+}
 
 fn parse_public_key(data: impl AsRef<str>) -> Result<ed25519::PublicKey> {
     hex_or_base64(data.as_ref().trim())
