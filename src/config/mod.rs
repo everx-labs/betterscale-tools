@@ -14,7 +14,7 @@ use nekoton_transport::gql::*;
 use nekoton_utils::{SimpleClock, TrustMe};
 use serde::Deserialize;
 use tokio::sync::oneshot;
-use ton_block::Serializable;
+use ton_block::{ConfigParamEnum, Serializable};
 use ton_types::IBitstring;
 
 use crate::zerostate::models::*;
@@ -43,52 +43,87 @@ pub async fn set_master_key(
         .await
 }
 
-#[derive(Deserialize)]
-#[serde(
-    tag = "param",
-    content = "value",
-    rename_all = "camelCase",
-    deny_unknown_fields
-)]
-pub enum ParamToChange {
-    /// Block creation fees
-    P14(BlockCreationFees),
-    /// Elector params
-    P15(ElectorParams),
-    /// Validator count
-    P16(ValidatorCount),
-    /// Stake params
-    P17(StakeParams),
-    /// Masterchain gas prices
-    P20(GasPricesEntry),
-    /// Basechain gas prices
-    P21(GasPricesEntry),
-    /// Masterchain block limits
-    P22(BlockLimitsEntry),
-    /// Basechain block limits
-    P23(BlockLimitsEntry),
-    /// Masterchain message forward prices
-    P24(MsgForwardPricesEntry),
-    /// Basechain message forward prices
-    P25(MsgForwardPricesEntry),
-}
+macro_rules! define_params(
+    (
+        $(#[$outer:ident $($outer_args:tt)*])*
+        $vis:vis enum $type:ident {
+            $(
+                #[doc = $desc:literal]
+                $variant:ident($variant_type:ident) => |$value:ident| $expr:expr
+            ),*
+            $(,)?
+        }
+    ) => {
+        $(#[$outer $($outer_args)*])*
+        $vis enum $type {
+            $(#[doc = $desc] $variant($variant_type)),*,
+        }
 
-impl ParamToChange {
-    pub fn into_param(self) -> Result<ton_block::ConfigParamEnum> {
-        use ton_block::ConfigParamEnum;
+        impl $type {
+            pub fn description() -> String {
+                let mut description = String::new();
+                $(description += &format!("{}:{}\n", stringify!($variant).to_lowercase(), $desc);)*
+                description
+            }
 
-        Ok(match self {
-            Self::P14(v) => ConfigParamEnum::ConfigParam14(v.build()),
-            Self::P15(v) => ConfigParamEnum::ConfigParam15(v.build()),
-            Self::P16(v) => ConfigParamEnum::ConfigParam16(v.build()),
-            Self::P17(v) => ConfigParamEnum::ConfigParam17(v.build()),
-            Self::P20(v) => ConfigParamEnum::ConfigParam20(v.build()),
-            Self::P21(v) => ConfigParamEnum::ConfigParam21(v.build()),
-            Self::P22(v) => ConfigParamEnum::ConfigParam22(v.build()?),
-            Self::P23(v) => ConfigParamEnum::ConfigParam23(v.build()?),
-            Self::P24(v) => ConfigParamEnum::ConfigParam24(v.build()),
-            Self::P25(v) => ConfigParamEnum::ConfigParam25(v.build()),
-        })
+            pub fn into_param(self) -> Result<ConfigParamEnum> {
+                Ok(match self {
+                    $(Self::$variant($value) => $expr),*,
+                })
+            }
+        }
+    };
+);
+
+define_params! {
+    #[derive(Deserialize)]
+    #[serde(
+        tag = "param",
+        content = "value",
+        rename_all = "camelCase",
+        deny_unknown_fields
+    )]
+    pub enum ParamToChange {
+        /// Global nodes version and capabilities
+        P8(GlobalVersion) => |v| ConfigParamEnum::ConfigParam8(v.build()),
+        /// Mandatory params
+        P9(MandatoryParams) => |v| {
+            ConfigParamEnum::ConfigParam9(ton_block::ConfigParam9 {
+                mandatory_params: v.build()?
+            })
+        },
+        /// Critical params
+        P10(MandatoryParams) => |v| {
+            ConfigParamEnum::ConfigParam10(ton_block::ConfigParam10 {
+                critical_params: v.build()?
+            })
+        },
+        /// Block creation fees
+        P14(BlockCreationFees) => |v| ConfigParamEnum::ConfigParam14(v.build()),
+        /// Elector params
+        P15(ElectorParams) => |v| ConfigParamEnum::ConfigParam15(v.build()),
+        /// Validator count
+        P16(ValidatorCount) => |v| ConfigParamEnum::ConfigParam16(v.build()),
+        /// Stake params
+        P17(StakeParams) => |v| ConfigParamEnum::ConfigParam17(v.build()),
+        /// Storage prices
+        P18(StoragePricesCollection) => |v| ConfigParamEnum::ConfigParam18(v.build()?),
+        /// Masterchain gas prices
+        P20(GasPricesEntry) => |v| ConfigParamEnum::ConfigParam20(v.build()),
+        /// Basechain gas prices
+        P21(GasPricesEntry) => |v| ConfigParamEnum::ConfigParam21(v.build()),
+        /// Masterchain block limits
+        P22(BlockLimitsEntry) => |v| ConfigParamEnum::ConfigParam22(v.build()?),
+        /// Basechain block limits
+        P23(BlockLimitsEntry) => |v| ConfigParamEnum::ConfigParam23(v.build()?),
+        /// Masterchain message forward prices
+        P24(MsgForwardPricesEntry) => |v| ConfigParamEnum::ConfigParam24(v.build()),
+        /// Basechain message forward prices
+        P25(MsgForwardPricesEntry) => |v| ConfigParamEnum::ConfigParam25(v.build()),
+        /// Catchain config
+        P28(CatchainParams) => |v| ConfigParamEnum::ConfigParam28(v.build()),
+        /// Consensus config
+        P29(ConsensusParams) => |v| ConfigParamEnum::ConfigParam29(v.build()),
     }
 }
 

@@ -213,40 +213,29 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
     // 8
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam8(
-            ton_block::ConfigParam8 {
-                global_version: ton_block::GlobalVersion {
-                    version: config.global_version,
-                    capabilities: config.global_capabilities,
-                },
-            },
+            GlobalVersion {
+                global_version: config.global_version,
+                global_capabilities: config.global_capabilities,
+            }
+            .build(),
         ))?;
 
     // 9
 
-    let mut mandatory_params = ton_block::MandatoryParams::default();
-    for param in config.mandatory_params {
-        mandatory_params
-            .set(&param, &())
-            .context("Failed to construct mandatory params")?;
-    }
-
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam9(
-            ton_block::ConfigParam9 { mandatory_params },
+            ton_block::ConfigParam9 {
+                mandatory_params: config.mandatory_params.build()?,
+            },
         ))?;
 
     // 10
 
-    let mut critical_params = ton_block::MandatoryParams::default();
-    for param in config.critical_params {
-        critical_params
-            .set(&param, &())
-            .context("Failed to construct critical params")?;
-    }
-
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam10(
-            ton_block::ConfigParam10 { critical_params },
+            ton_block::ConfigParam10 {
+                critical_params: config.critical_params.build()?,
+            },
         ))?;
 
     // 11
@@ -335,22 +324,9 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
 
     // 18
 
-    let mut prices = ton_block::ConfigParam18Map::default();
-    for (i, item) in config.storage_prices.iter().enumerate() {
-        prices.set(
-            &(i as u32),
-            &ton_block::StoragePrices {
-                utime_since: item.utime_since,
-                bit_price_ps: item.bit_price_ps,
-                cell_price_ps: item.cell_price_ps,
-                mc_bit_price_ps: item.mc_bit_price_ps,
-                mc_cell_price_ps: item.mc_cell_price_ps,
-            },
-        )?;
-    }
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam18(
-            ton_block::ConfigParam18 { map: prices },
+            config.storage_prices.build()?,
         ))?;
 
     // 20, 21
@@ -390,33 +366,14 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam28(
-            ton_block::CatchainConfig {
-                isolate_mc_validators: config.catchain_params.isolate_mc_validators,
-                shuffle_mc_validators: config.catchain_params.shuffle_mc_validators,
-                mc_catchain_lifetime: config.catchain_params.mc_catchain_lifetime,
-                shard_catchain_lifetime: config.catchain_params.shard_catchain_lifetime,
-                shard_validators_lifetime: config.catchain_params.shard_validators_lifetime,
-                shard_validators_num: config.catchain_params.shard_validators_num,
-            },
+            config.catchain_params.build(),
         ))?;
 
     // 29
 
     ex.config
         .set_config(ton_block::ConfigParamEnum::ConfigParam29(
-            ton_block::ConfigParam29 {
-                consensus_config: ton_block::ConsensusConfig {
-                    new_catchain_ids: config.consensus_params.new_catchain_ids,
-                    round_candidates: config.consensus_params.round_candidates,
-                    next_candidate_delay_ms: config.consensus_params.next_candidate_delay_ms,
-                    consensus_timeout_ms: config.consensus_params.consensus_timeout_ms,
-                    fast_attempts: config.consensus_params.fast_attempts,
-                    attempt_duration: config.consensus_params.attempt_duration,
-                    catchain_max_deps: config.consensus_params.catchain_max_deps,
-                    max_block_bytes: config.consensus_params.max_block_bytes,
-                    max_collated_bytes: config.consensus_params.max_collated_bytes,
-                },
-            },
+            config.consensus_params.build(),
         ))?;
 
     // 31

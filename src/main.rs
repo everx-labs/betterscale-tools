@@ -95,6 +95,10 @@ async fn run(app: App) -> Result<()> {
             Ok(())
         }
         Subcommand::Config(args) => match args.subcommand {
+            CmdConfigSubcommand::Description(_) => {
+                print!("{}", crate::config::ParamToChange::description());
+                Ok(())
+            }
             CmdConfigSubcommand::SetParam(args) => {
                 let secret = load_secret_key(args.sign)?;
 
@@ -224,9 +228,15 @@ struct CmdConfig {
 #[derive(Debug, PartialEq, FromArgs)]
 #[argh(subcommand)]
 enum CmdConfigSubcommand {
+    Description(CmdConfigDescription),
     SetParam(CmdConfigSetParam),
     SetMasterKey(CmdConfigSetMasterKey),
 }
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Show params of the config
+#[argh(subcommand, name = "description")]
+struct CmdConfigDescription {}
 
 #[derive(Debug, PartialEq, FromArgs)]
 /// Execute an action to change a config param

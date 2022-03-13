@@ -33,15 +33,15 @@ pub struct NetworkConfig {
     pub global_version: u32,
     #[serde(with = "serde_hex_number")]
     pub global_capabilities: u64,
-    pub mandatory_params: Vec<u32>,
-    pub critical_params: Vec<u32>,
+    pub mandatory_params: MandatoryParams,
+    pub critical_params: MandatoryParams,
     pub voting_setup: Option<ConfigVotingSetup>,
     pub workchains: Vec<WorkchainDescription>,
     pub block_creation_fees: BlockCreationFees,
     pub elector_params: ElectorParams,
     pub validator_count: ValidatorCount,
     pub stake_params: StakeParams,
-    pub storage_prices: Vec<StoragePrices>,
+    pub storage_prices: StoragePricesCollection,
     pub gas_prices: GasPrices,
     pub block_limits: BlockLimits,
     pub msg_forward_prices: MsgForwardPrices,
@@ -51,6 +51,41 @@ pub struct NetworkConfig {
     pub fundamental_addresses: Vec<ton_types::UInt256>,
     #[serde(with = "serde_vec_uint256")]
     pub validators_public_keys: Vec<ton_types::UInt256>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GlobalVersion {
+    pub global_version: u32,
+    #[serde(with = "serde_hex_number")]
+    pub global_capabilities: u64,
+}
+
+impl GlobalVersion {
+    pub fn build(&self) -> ton_block::ConfigParam8 {
+        ton_block::ConfigParam8 {
+            global_version: ton_block::GlobalVersion {
+                version: self.global_version,
+                capabilities: self.global_capabilities,
+            },
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent, deny_unknown_fields)]
+pub struct MandatoryParams(pub Vec<u32>);
+
+impl MandatoryParams {
+    pub fn build(&self) -> Result<ton_block::MandatoryParams> {
+        let mut mandatory_params = ton_block::MandatoryParams::default();
+        for param in &self.0 {
+            mandatory_params
+                .set(param, &())
+                .context("Failed to construct mandatory params")?;
+        }
+        Ok(mandatory_params)
+    }
 }
 
 #[derive(Deserialize)]
@@ -180,6 +215,20 @@ impl StakeParams {
 }
 
 #[derive(Deserialize)]
+#[serde(transparent, deny_unknown_fields)]
+pub struct StoragePricesCollection(Vec<StoragePrices>);
+
+impl StoragePricesCollection {
+    pub fn build(&self) -> Result<ton_block::ConfigParam18> {
+        let mut prices = ton_block::ConfigParam18Map::default();
+        for (i, item) in self.0.iter().enumerate() {
+            prices.set(&(i as u32), &item.build())?;
+        }
+        Ok(ton_block::ConfigParam18 { map: prices })
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoragePrices {
     pub utime_since: u32,
@@ -191,6 +240,18 @@ pub struct StoragePrices {
     pub mc_bit_price_ps: u64,
     #[serde(with = "serde_amount")]
     pub mc_cell_price_ps: u64,
+}
+
+impl StoragePrices {
+    pub fn build(&self) -> ton_block::StoragePrices {
+        ton_block::StoragePrices {
+            utime_since: self.utime_since,
+            bit_price_ps: self.bit_price_ps,
+            cell_price_ps: self.cell_price_ps,
+            mc_bit_price_ps: self.mc_bit_price_ps,
+            mc_cell_price_ps: self.mc_cell_price_ps,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -326,6 +387,19 @@ pub struct CatchainParams {
     pub shard_validators_num: u32,
 }
 
+impl CatchainParams {
+    pub fn build(&self) -> ton_block::CatchainConfig {
+        ton_block::CatchainConfig {
+            isolate_mc_validators: self.isolate_mc_validators,
+            shuffle_mc_validators: self.shuffle_mc_validators,
+            mc_catchain_lifetime: self.mc_catchain_lifetime,
+            shard_catchain_lifetime: self.shard_catchain_lifetime,
+            shard_validators_lifetime: self.shard_validators_lifetime,
+            shard_validators_num: self.shard_validators_num,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConsensusParams {
@@ -338,6 +412,24 @@ pub struct ConsensusParams {
     pub catchain_max_deps: u32,
     pub max_block_bytes: u32,
     pub max_collated_bytes: u32,
+}
+
+impl ConsensusParams {
+    pub fn build(&self) -> ton_block::ConfigParam29 {
+        ton_block::ConfigParam29 {
+            consensus_config: ton_block::ConsensusConfig {
+                new_catchain_ids: self.new_catchain_ids,
+                round_candidates: self.round_candidates,
+                next_candidate_delay_ms: self.next_candidate_delay_ms,
+                consensus_timeout_ms: self.consensus_timeout_ms,
+                fast_attempts: self.fast_attempts,
+                attempt_duration: self.attempt_duration,
+                catchain_max_deps: self.catchain_max_deps,
+                max_block_bytes: self.max_block_bytes,
+                max_collated_bytes: self.max_collated_bytes,
+            },
+        }
+    }
 }
 
 mod serde_account_states {
