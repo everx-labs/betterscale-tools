@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use ton_block::{ConfigParamEnum, Serializable};
 use ton_types::IBitstring;
 
-use crate::zerostate::models::*;
+use crate::models::*;
 
 pub async fn set_param(
     url: String,

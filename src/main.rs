@@ -10,6 +10,7 @@ use ton_block::Serializable;
 
 mod config;
 mod dht;
+mod models;
 mod system_accounts;
 mod zerostate;
 

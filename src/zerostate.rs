@@ -3,11 +3,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use ton_block::{AddSub, Serializable};
 
-use self::models::*;
 use crate::ed25519::*;
+use crate::models::*;
 use crate::system_accounts::*;
-
-pub mod models;
 
 pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<String> {
     let mut mc_zerstate =
