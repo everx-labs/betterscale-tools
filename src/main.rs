@@ -128,6 +128,7 @@ async fn run(app: App) -> Result<()> {
             &args.init_data,
             parse_public_key(&args.pubkey).context("Invalid pubkey")?,
             args.target,
+            args.token_root,
         ),
     }
 }
@@ -334,6 +335,10 @@ struct CmdMine {
     /// contract public key (000...000 by default)
     #[argh(option, long = "pubkey", default = "default_pubkey()")]
     pubkey: String,
+
+    /// also mine token address
+    #[argh(option, long = "token-root")]
+    token_root: Option<ton_block::MsgAddressInt>,
 }
 
 fn default_config_address() -> ton_block::MsgAddressInt {

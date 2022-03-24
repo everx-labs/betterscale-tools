@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use everscale_crypto::ed25519;
+use nekoton_abi::BuildTokenValue;
+use nekoton_utils::TrustMe;
 use old_rand::distributions::Distribution;
 use ton_block::{Deserializable, Serializable};
 
@@ -14,6 +16,7 @@ pub fn mine(
     init_data: &str,
     pubkey: ed25519::PublicKey,
     target: ton_block::MsgAddressInt,
+    token_root: Option<ton_block::MsgAddressInt>,
 ) -> Result<()> {
     let tvc = ton_block::StateInit::construct_from_file(tvc).context("Failed to read TVC")?;
     let abi = {
@@ -69,6 +72,8 @@ pub fn mine(
     let original_data = ton_abi::Contract::insert_pubkey(original_data, pubkey.as_bytes())
         .context("Failed to update pubkey")?;
 
+    let token_state = token_root.map(TokenState::new);
+
     let global_max_affinity = Arc::new(AtomicU8::new(0));
 
     let mut threads = Vec::new();
@@ -84,8 +89,9 @@ pub fn mine(
         let mut original_data =
             ton_types::HashmapE::with_hashmap(64, original_data.reference_opt(0));
 
-        let workchain = target.workchain_id();
+        let workchain_id = target.workchain_id() as i8;
         let target = target.address().get_bytestring(0);
+        let mut token_state = token_state.clone();
 
         let global_max_affinity = global_max_affinity.clone();
 
@@ -121,19 +127,37 @@ pub fn mine(
                     .context("Failed to serialize TVC")?
                     .repr_hash();
 
-                let same_bits = affinity(address.as_slice(), &target);
-                if same_bits <= max_affinity {
+                let mut address_affinity = affinity(address.as_slice(), &target);
+
+                let token_wallet = if let Some(token_state) = &mut token_state {
+                    let token_wallet = token_state.compute_address(address);
+
+                    let token_address_affinity = affinity(token_wallet.as_slice(), &target);
+                    address_affinity = std::cmp::min(address_affinity, token_address_affinity);
+
+                    Some(token_wallet)
+                } else {
+                    None
+                };
+
+                if address_affinity <= max_affinity {
                     continue;
                 }
-                max_affinity = same_bits;
+                max_affinity = address_affinity;
 
-                if global_max_affinity.fetch_max(same_bits, Ordering::SeqCst) == max_affinity {
+                if global_max_affinity.fetch_max(address_affinity, Ordering::SeqCst) == max_affinity
+                {
+                    let token_address = token_wallet
+                        .map(|addr| format!(" | Token: 0:{:x}", addr))
+                        .unwrap_or_default();
+
                     println!(
-                        "Found new address ({} bits, nonce: 0x{}): {}:{:x}",
-                        same_bits,
+                        "Bits: {} | Nonce: 0x{} | Address: {}:{:x}{}",
+                        address_affinity,
                         nonce.to_str_radix(16),
-                        workchain,
-                        address
+                        workchain_id,
+                        address,
+                        token_address
                     );
                 }
             }
@@ -171,4 +195,96 @@ pub fn affinity(left: &[u8], right: &[u8]) -> u8 {
     result
 }
 
+#[derive(Clone)]
+struct TokenState {
+    state: ton_block::StateInit,
+    data: ton_types::HashmapE,
+}
+
+impl TokenState {
+    fn new(token_root: ton_block::MsgAddressInt) -> Self {
+        let state = load_token_state();
+
+        let mut data = ton_types::HashmapE::with_hashmap(
+            64,
+            state
+                .data
+                .as_ref()
+                .expect("Always has been")
+                .reference(0)
+                .ok(),
+        );
+
+        let builder = token_root
+            .token_value()
+            .pack_into_chain(&ton_abi::contract::ABI_VERSION_2_2)
+            .trust_me();
+
+        data.set_builder(1u64.serialize().trust_me().into(), &builder)
+            .trust_me();
+
+        Self { state, data }
+    }
+
+    fn compute_address(&mut self, address: ton_types::UInt256) -> ton_types::UInt256 {
+        self.data
+            .set_builder(
+                2u64.serialize().trust_me().into(),
+                &ton_abi::TokenValue::Address(ton_block::MsgAddress::AddrStd(
+                    ton_block::MsgAddrStd {
+                        workchain_id: 0,
+                        address: address.into(),
+                        anycast: None,
+                    },
+                ))
+                .pack_into_chain(&ton_abi::contract::ABI_VERSION_2_2)
+                .trust_me(),
+            )
+            .trust_me();
+
+        self.state.data = Some(self.data.serialize().trust_me());
+
+        self.state.serialize().trust_me().repr_hash()
+    }
+}
+
+fn load_token_state() -> ton_block::StateInit {
+    ton_block::StateInit::construct_from_bytes(include_bytes!("TokenWalletPlatform.tvc"))
+        .expect("Shouldn't fail")
+}
+
 static BITS: [u8; 16] = [4, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn correct_token_wallet_address() {
+        let mut wever = TokenState::new(
+            ton_block::MsgAddressInt::from_str(
+                "0:a49cd4e158a9a15555e624759e2e4e766d22600b7800d891e46f9291f044a93d",
+            )
+            .unwrap(),
+        );
+
+        let vault = ton_block::MsgAddressInt::from_str(
+            "0:6fa537fa97adf43db0206b5bec98eb43474a9836c016a190ac8b792feb852230",
+        )
+        .unwrap();
+
+        let token_address = wever.compute_address(
+            0,
+            ton_types::UInt256::from_str(
+                "6fa537fa97adf43db0206b5bec98eb43474a9836c016a190ac8b792feb852230",
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            token_address.as_hex_string(),
+            "4a64bb41cb22e0fd85b42ddc20da31a90c6939677db3b09b1b369a01ae814cc9"
+        );
+    }
+}
