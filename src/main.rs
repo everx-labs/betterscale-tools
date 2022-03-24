@@ -10,12 +10,15 @@ use ton_block::Serializable;
 
 mod config;
 mod dht;
+mod mine;
 mod models;
 mod system_accounts;
 mod zerostate;
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     if let Err(e) = run(argh::from_env()).await {
         eprintln!("{:?}", e);
         std::process::exit(1);
@@ -118,6 +121,14 @@ async fn run(app: App) -> Result<()> {
                 config::set_master_key(args.url, &args.address, &secret, master_key).await
             }
         },
+        Subcommand::Mine(args) => mine::mine(
+            args.tvc,
+            args.abi,
+            &args.nonce_field,
+            &args.init_data,
+            parse_public_key(&args.pubkey).context("Invalid pubkey")?,
+            args.target,
+        ),
     }
 }
 
@@ -136,6 +147,7 @@ enum Subcommand {
     Account(CmdAccount),
     KeyPair(CmdKeyPair),
     Config(CmdConfig),
+    Mine(CmdMine),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -295,11 +307,44 @@ struct CmdConfigSetMasterKey {
     pubkey: String,
 }
 
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates required address for the contract
+#[argh(subcommand, name = "mine")]
+struct CmdMine {
+    /// path to the TVC file
+    #[argh(option, long = "tvc")]
+    tvc: PathBuf,
+
+    /// path to the ABI file
+    #[argh(option, long = "abi")]
+    abi: PathBuf,
+
+    /// contract init data value
+    #[argh(option, long = "init-data", default = "\"{}\".to_owned()")]
+    init_data: String,
+
+    /// nonce field name
+    #[argh(option, long = "nonce-field")]
+    nonce_field: String,
+
+    /// target address
+    #[argh(option, long = "target")]
+    target: ton_block::MsgAddressInt,
+
+    /// contract public key (000...000 by default)
+    #[argh(option, long = "pubkey", default = "default_pubkey()")]
+    pubkey: String,
+}
+
 fn default_config_address() -> ton_block::MsgAddressInt {
     ton_block::MsgAddressInt::from_str(
         "-1:5555555555555555555555555555555555555555555555555555555555555555",
     )
     .expect("Shouldn't fail")
+}
+
+fn default_pubkey() -> String {
+    "00".repeat(32)
 }
 
 fn load_secret_key(path: PathBuf) -> Result<ed25519::SecretKey> {

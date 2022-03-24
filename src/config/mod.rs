@@ -11,6 +11,7 @@ use nekoton::core::models::{
 use nekoton::transport::models::*;
 use nekoton::transport::Transport;
 use nekoton_transport::gql::*;
+use nekoton_transport::jrpc::*;
 use nekoton_utils::{SimpleClock, TrustMe};
 use serde::Deserialize;
 use tokio::sync::oneshot;
@@ -287,13 +288,21 @@ fn create_message(
 }
 
 fn make_client(url: String) -> Result<Arc<dyn Transport>> {
-    let client = GqlClient::new(GqlNetworkSettings {
-        endpoints: vec![url],
-        latency_detection_interval: Duration::from_secs(1),
-        ..Default::default()
-    })?;
+    if url.ends_with("rpc") {
+        let client = JrpcClient::new(url).context("Failed to create jrpc client")?;
 
-    Ok(Arc::new(nekoton::transport::gql::GqlTransport::new(client)))
+        Ok(Arc::new(nekoton::transport::jrpc::JrpcTransport::new(
+            client,
+        )))
+    } else {
+        let client = GqlClient::new(GqlNetworkSettings {
+            endpoints: vec![url],
+            latency_detection_interval: Duration::from_secs(1),
+            ..Default::default()
+        })?;
+
+        Ok(Arc::new(nekoton::transport::gql::GqlTransport::new(client)))
+    }
 }
 
 #[derive(Debug, Clone)]

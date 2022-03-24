@@ -12,12 +12,14 @@ anyhow = "1.0"
 argh = "0.1"
 base64 = "0.13"
 curve25519-dalek-ng = "4.1"
+env_logger = "0.9.0"
 everscale-crypto = "0.0.1"
 generic-array = { version = "0.14", features = ["more_lengths"] }
 hex = "0.4"
-num-bigint = "0.3"
+num-bigint = { version = "0.3", features = ["rand"] }
 parking_lot = "0.12.0"
 rand = "0.8"
+old_rand = { version = "0.7", package = "rand" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_path_to_error = "0.1"
@@ -26,9 +28,11 @@ thiserror = "1.0"
 tl-proto = "0.1"
 tokio = { version = "1.17.0", features = ["macros", "sync", "rt-multi-thread"] }
 
-nekoton = { git = "https://github.com/broxus/nekoton.git" }
-nekoton-transport = { git = "https://github.com/broxus/nekoton.git" }
+nekoton = { git = "https://github.com/broxus/nekoton.git", features = ["gql_transport", "jrpc_transport"] }
+nekoton-transport = { git = "https://github.com/broxus/nekoton.git", features = ["gql_transport", "jrpc_transport"] }
 nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
+nekoton-abi = { git = "http://github.com/broxus/nekoton.git" }
 
 ton_block = { git = "https://github.com/broxus/ton-labs-block.git" }
 ton_types = { git = "https://github.com/broxus/ton-labs-types.git" }
+ton_abi = { git = "https://github.com/broxus/ton-labs-abi.git" }
