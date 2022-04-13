@@ -46,7 +46,6 @@ pub fn build_config_state(
             last_trans_lt: 0,
             balance,
             state: ton_block::AccountState::AccountActive {
-                init_code_hash: None,
                 state_init: ton_block::StateInit {
                     split_depth: None,
                     special: Some(ton_block::TickTock {
@@ -58,6 +57,7 @@ pub fn build_config_state(
                     library: Default::default(),
                 },
             },
+            init_code_hash: None,
         },
     });
     account
@@ -89,7 +89,6 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
             last_trans_lt: 0,
             balance,
             state: ton_block::AccountState::AccountActive {
-                init_code_hash: None,
                 state_init: ton_block::StateInit {
                     split_depth: None,
                     special: Some(ton_block::TickTock {
@@ -101,6 +100,7 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
                     library: Default::default(),
                 },
             },
+            init_code_hash: None,
         },
     });
     account
@@ -258,10 +258,8 @@ impl MultisigBuilder {
             storage: ton_block::AccountStorage {
                 last_trans_lt: 0,
                 balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
-                state: ton_block::AccountState::AccountActive {
-                    init_code_hash: None,
-                    state_init,
-                },
+                state: ton_block::AccountState::AccountActive { state_init },
+                init_code_hash: None,
             },
         });
         account
