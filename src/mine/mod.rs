@@ -20,11 +20,11 @@ pub fn mine(
 ) -> Result<()> {
     let tvc = ton_block::StateInit::construct_from_file(tvc).context("Failed to read TVC")?;
     let abi = {
-        let file = std::fs::File::open(abi).context("Failed to open ABI")?;
-        ton_abi::Contract::load(std::io::BufReader::new(file)).context("Failed to read ABI")?
+        let abi = std::fs::read_to_string(abi).context("Failed to open ABI")?;
+        ton_abi::Contract::load(&abi).context("Failed to read ABI")?
     };
     let init_data_params = abi
-        .data()
+        .data
         .values()
         .filter_map(|data| {
             if data.value.name != field {
@@ -35,10 +35,10 @@ pub fn mine(
         })
         .collect::<Vec<_>>();
 
-    let field = abi.data().get(field).with_context(|| {
+    let field = abi.data.get(field).with_context(|| {
         format!(
             "Static field not found. Available: {}",
-            abi.data()
+            abi.data
                 .keys()
                 .map(|key| format!("'{}'", key))
                 .collect::<Vec<_>>()
@@ -60,7 +60,7 @@ pub fn mine(
     let init_data = nekoton_abi::parse_abi_tokens(&init_data_params, init_data)
         .context("Failed to parse init data")?;
 
-    let abi_version = *abi.version();
+    let abi_version = abi.abi_version;
 
     let original_data = abi
         .update_data(
@@ -95,7 +95,7 @@ pub fn mine(
 
         let global_max_affinity = global_max_affinity.clone();
 
-        threads.push(std::thread::spawn(move || -> anyhow::Result<()> {
+        threads.push(std::thread::spawn(move || -> Result<()> {
             let mut rng = old_rand::thread_rng();
 
             let distribution = num_bigint::RandomBits::new(nonce_bits);

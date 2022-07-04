@@ -143,9 +143,15 @@ impl ConfigContract {
         let handler = Arc::new(ConfigContractHandler::default());
 
         let subscription = Arc::new(tokio::sync::Mutex::new(
-            GenericContract::subscribe(clock, transport.clone(), address.clone(), handler.clone())
-                .await
-                .context("Failed to create config contract subscription")?,
+            GenericContract::subscribe(
+                clock,
+                transport.clone(),
+                address.clone(),
+                handler.clone(),
+                false,
+            )
+            .await
+            .context("Failed to create config contract subscription")?,
         ));
 
         tokio::spawn({
@@ -282,7 +288,7 @@ fn create_message(
             dst: address.clone(),
             ..Default::default()
         });
-    *message.body_mut() = Some(builder.into());
+    message.set_body(builder.into());
 
     Ok((message, expire_at))
 }
