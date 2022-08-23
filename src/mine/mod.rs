@@ -18,7 +18,8 @@ pub fn mine(
     target: ton_block::MsgAddressInt,
     token_root: Option<ton_block::MsgAddressInt>,
 ) -> Result<()> {
-    let tvc = ton_block::StateInit::construct_from_file(tvc).context("Failed to read TVC")?;
+    let bytes = std::fs::read(tvc)?;
+    let tvc = ton_block::StateInit::construct_from_bytes(&bytes).context("Failed to read TVC")?;
     let abi = {
         let abi = std::fs::read_to_string(abi).context("Failed to open ABI")?;
         ton_abi::Contract::load(&abi).context("Failed to read ABI")?

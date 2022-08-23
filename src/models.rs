@@ -131,6 +131,85 @@ pub struct WorkchainDescription {
     pub vm_version: i32,
     #[serde(with = "serde_hex_number")]
     pub vm_mode: u64,
+    #[serde(default, with = "serde_optional_uint256")]
+    pub zerostate_root_hash: Option<ton_types::UInt256>,
+    #[serde(default, with = "serde_optional_uint256")]
+    pub zerostate_file_hash: Option<ton_types::UInt256>,
+    #[serde(default)]
+    pub version: u32,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ConfigBuildContext {
+    Initial { gen_utime: u32 },
+    Update,
+}
+
+pub trait WorkchainDescriptionExt {
+    fn build(&self, ctx: ConfigBuildContext) -> Result<ton_block::ConfigParam12>;
+}
+
+impl WorkchainDescriptionExt for Vec<WorkchainDescription> {
+    fn build(&self, ctx: ConfigBuildContext) -> Result<ton_block::ConfigParam12> {
+        let mut workchains = ton_block::Workchains::default();
+        for workchain in self {
+            let mut descr = ton_block::WorkchainDescr::default();
+
+            match ctx {
+                ConfigBuildContext::Initial { gen_utime } => {
+                    descr.enabled_since = workchain.enabled_since.unwrap_or(gen_utime);
+                }
+                ConfigBuildContext::Update => {
+                    descr.enabled_since = workchain
+                        .enabled_since
+                        .context("`enabled_since` param is required")?;
+                }
+            }
+
+            descr
+                .set_min_split(workchain.min_split)
+                .context("Failed to set workchain min split")?;
+            descr
+                .set_max_split(workchain.max_split)
+                .context("Failed to set workchain max split")?;
+            descr.flags = workchain.flags;
+            descr.active = workchain.active;
+            descr.accept_msgs = workchain.accept_msgs;
+
+            match ctx {
+                ConfigBuildContext::Initial { .. } => {
+                    anyhow::ensure!(
+                        workchain.zerostate_root_hash.is_none(),
+                        "Zerostate root hash must not be specified"
+                    );
+                    anyhow::ensure!(
+                        workchain.zerostate_file_hash.is_none(),
+                        "Zerostate file hash must not be specified"
+                    );
+                }
+                ConfigBuildContext::Update => {
+                    if let Some(root_hash) = workchain.zerostate_root_hash {
+                        descr.zerostate_root_hash = root_hash;
+                    }
+                    if let Some(file_hash) = workchain.zerostate_file_hash {
+                        descr.zerostate_file_hash = file_hash;
+                    }
+                }
+            }
+
+            descr.format = ton_block::WorkchainFormat::Basic(
+                ton_block::WorkchainFormat1::with_params(workchain.vm_version, workchain.vm_mode),
+            );
+
+            descr.version = workchain.version;
+
+            workchains
+                .set(&workchain.workchain_id, &descr)
+                .context("Failed to set workchain")?;
+        }
+
+        Ok(ton_block::ConfigParam12 { workchains })
+    }
 }
 
 #[derive(Deserialize)]

@@ -102,33 +102,7 @@ define_params! {
         },
         /// Workchains
         P12(Workchains) => |v| {
-            let mut workchains = ton_block::Workchains::default();
-            for workchain in v {
-                let mut descr = ton_block::WorkchainDescr::default();
-                descr.enabled_since = workchain.enabled_since
-                    .context("`enabled_since` param is required")?;
-                descr
-                    .set_min_split(workchain.min_split)
-                    .context("Failed to set workchain min split")?;
-                descr
-                    .set_max_split(workchain.max_split)
-                    .context("Failed to set workchain max split")?;
-                descr.flags = workchain.flags;
-                descr.active = workchain.active;
-                descr.accept_msgs = workchain.accept_msgs;
-
-                descr.format = ton_block::WorkchainFormat::Basic(ton_block::WorkchainFormat1::with_params(
-                    workchain.vm_version,
-                    workchain.vm_mode,
-                ));
-
-                workchains
-                    .set(&workchain.workchain_id, &descr)
-                    .context("Failed to set workchain")?;
-            }
-            ConfigParamEnum::ConfigParam12(ton_block::ConfigParam12 {
-                workchains
-            })
+            ConfigParamEnum::ConfigParam12(v.build(ConfigBuildContext::Update)?)
         },
         /// Block creation fees
         P14(BlockCreationFees) => |v| ConfigParamEnum::ConfigParam14(v.build()),
