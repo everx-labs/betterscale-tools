@@ -61,6 +61,7 @@ macro_rules! define_params(
         }
 
         impl $type {
+            #[allow(clippy::format_push_string)]
             pub fn description() -> String {
                 let mut description = String::new();
                 $(description += &format!("{}:{}\n", stringify!($variant).to_lowercase(), $desc);)*
@@ -99,6 +100,36 @@ define_params! {
                 critical_params: v.build()?
             })
         },
+        /// Workchains
+        P12(Workchains) => |v| {
+            let mut workchains = ton_block::Workchains::default();
+            for workchain in v {
+                let mut descr = ton_block::WorkchainDescr::default();
+                descr.enabled_since = workchain.enabled_since
+                    .context("`enabled_since` param is required")?;
+                descr
+                    .set_min_split(workchain.min_split)
+                    .context("Failed to set workchain min split")?;
+                descr
+                    .set_max_split(workchain.max_split)
+                    .context("Failed to set workchain max split")?;
+                descr.flags = workchain.flags;
+                descr.active = workchain.active;
+                descr.accept_msgs = workchain.accept_msgs;
+
+                descr.format = ton_block::WorkchainFormat::Basic(ton_block::WorkchainFormat1::with_params(
+                    workchain.vm_version,
+                    workchain.vm_mode,
+                ));
+
+                workchains
+                    .set(&workchain.workchain_id, &descr)
+                    .context("Failed to set workchain")?;
+            }
+            ConfigParamEnum::ConfigParam12(ton_block::ConfigParam12 {
+                workchains
+            })
+        },
         /// Block creation fees
         P14(BlockCreationFees) => |v| ConfigParamEnum::ConfigParam14(v.build()),
         /// Elector params
@@ -127,6 +158,8 @@ define_params! {
         P29(ConsensusParams) => |v| ConfigParamEnum::ConfigParam29(v.build()),
     }
 }
+
+type Workchains = Vec<WorkchainDescription>;
 
 struct ConfigContract {
     address: ton_block::MsgAddressInt,
