@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -100,7 +101,7 @@ async fn run(app: App) -> Result<()> {
         }
         Subcommand::Config(args) => match args.subcommand {
             CmdConfigSubcommand::Description(_) => {
-                print!("{}", crate::config::ParamToChange::description());
+                print!("{}", config::ParamToChange::description());
                 Ok(())
             }
             CmdConfigSubcommand::SetParam(args) => {
@@ -119,6 +120,35 @@ async fn run(app: App) -> Result<()> {
                 let master_key = parse_public_key(args.pubkey).context("Invalid master key")?;
 
                 config::set_master_key(args.url, &args.address, &secret, master_key).await
+            }
+            CmdConfigSubcommand::UpdateElector(args) => {
+                let secret = load_secret_key(args.sign)?;
+
+                fn parse_cell(cell: &str) -> Result<ton_types::Cell> {
+                    let cell = base64::decode(cell)?;
+                    ton_types::deserialize_tree_of_cells(&mut cell.as_slice())
+                }
+
+                let code = if let Some(code) = args.code {
+                    std::fs::read_to_string(code).context("Failed to read elector code")?
+                } else {
+                    let mut code = String::new();
+                    std::io::stdin()
+                        .read_to_string(&mut code)
+                        .context("Failed to read elector code from stdin")?;
+                    code
+                };
+
+                let code = parse_cell(&code).context("Invalid elector code")?;
+                let params = match args.params {
+                    Some(params) => {
+                        let cell = parse_cell(&params).context("Invalid params")?;
+                        Some(cell.into())
+                    }
+                    None => None,
+                };
+
+                config::set_elector_code(args.url, &args.address, &secret, code, params).await
             }
         },
         Subcommand::Mine(args) => mine::mine(
@@ -245,6 +275,7 @@ enum CmdConfigSubcommand {
     Description(CmdConfigDescription),
     SetParam(CmdConfigSetParam),
     SetMasterKey(CmdConfigSetMasterKey),
+    UpdateElector(CmdConfigUpdateElector),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -265,7 +296,7 @@ struct CmdConfigSetParam {
     )]
     address: ton_block::MsgAddressInt,
 
-    /// gql endpoint address
+    /// gql or jrpc endpoint address
     #[argh(option, long = "url")]
     url: String,
 
@@ -295,7 +326,7 @@ struct CmdConfigSetMasterKey {
     )]
     address: ton_block::MsgAddressInt,
 
-    /// gql endpoint address
+    /// gql or jrpc endpoint address
     #[argh(option, long = "url")]
     url: String,
 
@@ -306,6 +337,37 @@ struct CmdConfigSetMasterKey {
     /// new master public key
     #[argh(positional)]
     pubkey: String,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Update elector code
+#[argh(subcommand, name = "updateElector")]
+struct CmdConfigUpdateElector {
+    /// config address
+    #[argh(
+        option,
+        long = "address",
+        short = 'a',
+        default = "default_config_address()"
+    )]
+    address: ton_block::MsgAddressInt,
+
+    /// gql or jrpc endpoint address
+    #[argh(option, long = "url")]
+    url: String,
+
+    /// path to the file with keys
+    #[argh(option, long = "sign", short = 's')]
+    sign: PathBuf,
+
+    /// optional additional argument which is passed to the `after_code_upgrade`
+    /// as cell slice
+    #[argh(option, long = "params", short = 'p')]
+    params: Option<String>,
+
+    /// path to the code or empty for input from stdin
+    #[argh(positional)]
+    code: Option<String>,
 }
 
 #[derive(Debug, PartialEq, FromArgs)]

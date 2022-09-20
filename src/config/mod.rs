@@ -44,6 +44,19 @@ pub async fn set_master_key(
         .await
 }
 
+pub async fn set_elector_code(
+    url: String,
+    config: &ton_block::MsgAddressInt,
+    secret: &ed25519::SecretKey,
+    code: ton_types::Cell,
+    params: Option<ton_types::SliceData>,
+) -> Result<()> {
+    ConfigContract::subscribe(url, config)
+        .await?
+        .execute_action(secret, Action::UpdateElectorCode { code, params })
+        .await
+}
+
 macro_rules! define_params(
     (
         $(#[$outer:ident $($outer_args:tt)*])*
@@ -332,8 +345,10 @@ enum Action {
 
     /// First ref is elector code.
     /// Remaining data is passed to `after_code_upgrade`
-    #[allow(unused)]
-    UpdateElectorCode(ton_types::SliceData),
+    UpdateElectorCode {
+        code: ton_types::Cell,
+        params: Option<ton_types::SliceData>,
+    },
 }
 
 impl Action {
@@ -354,8 +369,12 @@ impl Action {
                 data.append_raw(key.as_bytes(), 256).trust_me();
                 (0x50624b21, data)
             }
-            Self::UpdateElectorCode(code_with_params) => {
-                (0x4e43ef05, code_with_params.into_cell().into())
+            Self::UpdateElectorCode { code, params } => {
+                data.append_reference_cell(code);
+                if let Some(params) = params {
+                    data.append_builder(&ton_types::BuilderData::from_slice(&params))?;
+                }
+                (0x4e43ef05, data)
             }
         })
     }

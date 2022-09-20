@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use everscale_crypto::ed25519;
 use nekoton_abi::BuildTokenValue;
 use nekoton_utils::TrustMe;
-use old_rand::distributions::Distribution;
+use rand::distributions::Distribution;
 use ton_block::{Deserializable, Serializable};
 
 pub fn mine(
@@ -97,7 +97,7 @@ pub fn mine(
         let global_max_affinity = global_max_affinity.clone();
 
         threads.push(std::thread::spawn(move || -> Result<()> {
-            let mut rng = old_rand::thread_rng();
+            let mut rng = rand::thread_rng();
 
             let distribution = num_bigint::RandomBits::new(nonce_bits);
 
@@ -277,7 +277,6 @@ mod tests {
         .unwrap();
 
         let token_address = wever.compute_address(
-            0,
             ton_types::UInt256::from_str(
                 "6fa537fa97adf43db0206b5bec98eb43474a9836c016a190ac8b792feb852230",
             )
