@@ -130,16 +130,17 @@ async fn run(app: App) -> Result<()> {
                 }
 
                 let code = if let Some(code) = args.code {
-                    std::fs::read_to_string(code).context("Failed to read elector code")?
+                    std::fs::read(code).context("Failed to read elector code")?
                 } else {
-                    let mut code = String::new();
+                    let mut code = Vec::new();
                     std::io::stdin()
-                        .read_to_string(&mut code)
+                        .read_to_end(&mut code)
                         .context("Failed to read elector code from stdin")?;
                     code
                 };
 
-                let code = parse_cell(&code).context("Invalid elector code")?;
+                let code = ton_types::deserialize_tree_of_cells(&mut code.as_slice())
+                    .context("Invalid elector code")?;
                 let params = match args.params {
                     Some(params) => {
                         let cell = parse_cell(&params).context("Invalid params")?;
