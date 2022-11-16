@@ -110,14 +110,28 @@ pub fn build_elector_state(address: ton_types::UInt256) -> Result<ton_block::Acc
     Ok(account)
 }
 
-pub fn build_giver(balance: u128) -> Result<(ton_types::UInt256, ton_block::Account)> {
+pub fn build_giver(
+    balance: u128,
+    pubkey: PublicKey,
+) -> Result<(ton_types::UInt256, ton_block::Account)> {
     let mut account = ton_block::Account::construct_from_bytes(GIVER_STATE)
         .context("Failed to read giver state")?;
 
+    let state_init = account.state_init_mut().expect("Shouldn't fail");
+    if let Some(data) = state_init.data.take() {
+        let mut data: ton_types::SliceData = data.into();
+        data.move_by(256).expect("invalid giver state");
+
+        let mut new_data = ton_types::BuilderData::new();
+        new_data
+            .append_raw(pubkey.as_bytes(), 256)?
+            .append_builder(&ton_types::BuilderData::from_slice(&data))?;
+
+        state_init.data = Some(new_data.into_cell()?);
+    }
+
     // Compute address
-    let address = account
-        .state_init()
-        .expect("Shouldn't fail")
+    let address = state_init
         .hash()
         .context("Failed to serialize state init")?;
 

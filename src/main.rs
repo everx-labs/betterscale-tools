@@ -53,7 +53,9 @@ async fn run(app: App) -> Result<()> {
         }
         Subcommand::Account(args) => {
             let (address, account) = match args.subcommand {
-                AccountSubcommand::Giver(args) => system_accounts::build_giver(args.balance),
+                AccountSubcommand::Giver(args) => {
+                    system_accounts::build_giver(args.balance, parse_public_key(args.pubkey)?)
+                }
                 AccountSubcommand::Multisig(args) => {
                     system_accounts::MultisigBuilder::new(parse_public_key(args.pubkey)?)
                         .custodians(
@@ -171,6 +173,7 @@ struct App {
     command: Subcommand,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, FromArgs)]
 #[argh(subcommand)]
 enum Subcommand {
@@ -227,6 +230,10 @@ enum AccountSubcommand {
 /// Generates giver account zerostate entry
 #[argh(subcommand, name = "giver")]
 struct CmdAccountGiver {
+    /// account public key
+    #[argh(option, long = "pubkey", short = 'p')]
+    pubkey: String,
+
     /// account balance in nano evers
     #[argh(option, long = "balance", short = 'b')]
     balance: u128,

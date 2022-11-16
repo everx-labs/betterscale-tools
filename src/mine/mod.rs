@@ -271,11 +271,6 @@ mod tests {
             .unwrap(),
         );
 
-        let vault = ton_block::MsgAddressInt::from_str(
-            "0:6fa537fa97adf43db0206b5bec98eb43474a9836c016a190ac8b792feb852230",
-        )
-        .unwrap();
-
         let token_address = wever.compute_address(
             ton_types::UInt256::from_str(
                 "6fa537fa97adf43db0206b5bec98eb43474a9836c016a190ac8b792feb852230",
