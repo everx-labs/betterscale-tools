@@ -9,6 +9,8 @@ use everscale_crypto::ed25519;
 use nekoton_utils::*;
 use ton_block::Serializable;
 
+use self::system_accounts::MultisigType;
+
 mod config;
 mod dht;
 mod mine;
@@ -52,18 +54,19 @@ async fn run(app: App) -> Result<()> {
                 AccountSubcommand::Giver(args) => {
                     system_accounts::build_giver(args.balance, parse_public_key(args.pubkey)?)
                 }
-                AccountSubcommand::Multisig(args) => {
-                    system_accounts::MultisigBuilder::new(parse_public_key(args.pubkey)?)
-                        .custodians(
-                            args.custodians
-                                .into_iter()
-                                .map(parse_public_key)
-                                .collect::<Result<Vec<_>>>()?,
-                        )
-                        .required_confirms(args.required_confirms)
-                        .upgradable(args.upgradable)
-                        .build(args.balance)
-                }
+                AccountSubcommand::Multisig(args) => system_accounts::MultisigBuilder::new(
+                    parse_public_key(args.pubkey)?,
+                    args.multisig_type,
+                )
+                .custodians(
+                    args.custodians
+                        .into_iter()
+                        .map(parse_public_key)
+                        .collect::<Result<Vec<_>>>()?,
+                )
+                .required_confirms(args.required_confirms)
+                .lifetime(args.lifetime)
+                .build_with_balance(args.balance),
             }
             .context("Failed to build account")?;
 
@@ -251,9 +254,18 @@ struct CmdAccountMultisig {
     #[argh(option, long = "req-confirms", short = 'r')]
     required_confirms: Option<u8>,
 
-    /// whether contract code can be changed in future
-    #[argh(switch, long = "upgradable", short = 'u')]
-    upgradable: bool,
+    /// multisig wallet type (multisig2 by default)
+    #[argh(
+        option,
+        long = "type",
+        short = 't',
+        default = "MultisigType::Multisig2"
+    )]
+    multisig_type: MultisigType,
+
+    /// custom transaction lifetime in seconds
+    #[argh(option, long = "lifetime", short = 'l')]
+    lifetime: Option<u32>,
 
     /// account balance in nano EVER
     #[argh(option, long = "balance", short = 'b')]

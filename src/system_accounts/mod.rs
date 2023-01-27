@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{Context, Result};
 use ton_block::{Deserializable, GetRepresentationHash, Serializable};
 use ton_types::IBitstring;
@@ -146,20 +148,42 @@ pub fn build_giver(
     Ok((address, account))
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum MultisigType {
+    SafeMultisig,
+    SetcodeMultisig,
+    Multisig2,
+}
+
+impl FromStr for MultisigType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "SafeMultisig" | "SafeMultisigWallet" => Self::SafeMultisig,
+            "SetcodeMultisig" | "SetcodeMultisigWallet" => Self::SetcodeMultisig,
+            "Multisig2" | "multisig2" => Self::Multisig2,
+            _ => anyhow::bail!("Unknown wallet type"),
+        })
+    }
+}
+
 pub struct MultisigBuilder {
     pubkey: PublicKey,
     custodians: Vec<PublicKey>,
     required_confirms: Option<u8>,
-    upgradable: bool,
+    lifetime: Option<u32>,
+    ty: MultisigType,
 }
 
 impl MultisigBuilder {
-    pub fn new(pubkey: PublicKey) -> Self {
+    pub fn new(pubkey: PublicKey, ty: MultisigType) -> Self {
         Self {
             pubkey,
             custodians: Vec::new(),
             required_confirms: None,
-            upgradable: false,
+            lifetime: None,
+            ty,
         }
     }
 
@@ -173,16 +197,29 @@ impl MultisigBuilder {
         self
     }
 
-    pub fn upgradable(mut self, upgradable: bool) -> Self {
-        self.upgradable = upgradable;
+    pub fn lifetime(mut self, lifetime: Option<u32>) -> Self {
+        self.lifetime = lifetime;
         self
     }
 
-    pub fn build(mut self, balance: u128) -> Result<(ton_types::UInt256, ton_block::Account)> {
-        let code = ton_types::deserialize_tree_of_cells(&mut if self.upgradable {
-            SETCODE_MULTISIG_CODE
-        } else {
-            MULTISIG_CODE
+    pub fn build_with_balance(
+        mut self,
+        balance: u128,
+    ) -> Result<(ton_types::UInt256, ton_block::Account)> {
+        const DEFAULT_LIFETIME: u32 = 3600;
+
+        if let Some(lifetime) = self.lifetime {
+            anyhow::ensure!(
+                self.ty == MultisigType::Multisig2,
+                "Custom lifetime is not supported by this multisig type"
+            );
+            anyhow::ensure!(lifetime > 600, "Transaction lifetime is too small");
+        }
+
+        let code = ton_types::deserialize_tree_of_cells(&mut match self.ty {
+            MultisigType::SafeMultisig => MULTISIG_CODE,
+            MultisigType::SetcodeMultisig => SETCODE_MULTISIG_CODE,
+            MultisigType::Multisig2 => MULTISIG2_CODE,
         })
         .context("Failed to read multisig code")?;
 
@@ -204,11 +241,14 @@ impl MultisigBuilder {
             0u64.serialize()?.into(),
             &ton_types::SliceData::from_raw(self.pubkey.as_bytes().to_vec(), 256),
         )?;
-        init_params.set(8u64.serialize()?.into(), &{
-            let mut map = ton_types::HashmapE::with_bit_len(64);
-            map.set(0u64.serialize()?.into(), &Default::default())?;
-            map.serialize()?.into()
-        })?;
+
+        if self.ty != MultisigType::Multisig2 {
+            init_params.set(8u64.serialize()?.into(), &{
+                let mut map = ton_types::HashmapE::with_bit_len(64);
+                map.set(0u64.serialize()?.into(), &Default::default())?;
+                map.serialize()?.into()
+            })?;
+        }
 
         let mut state_init = ton_block::StateInit {
             code: Some(code),
@@ -219,48 +259,70 @@ impl MultisigBuilder {
             .hash()
             .context("Failed to serialize state init")?;
 
-        // Build data
-        let mut data = ton_types::BuilderData::new();
-        data.append_raw(self.pubkey.as_bytes(), 256)?; // pubkey
-        data.append_u64(0)?; // time
-        data.append_bit_one()?; // constructor flag
-
-        data.append_raw(
-            self.custodians.first().unwrap_or(&self.pubkey).as_bytes(),
-            256,
-        )?; // m_ownerKey
-        data.append_raw(&[0; 32], 256)?; // m_requestsMask
-
-        data.append_u8(custodian_count)?; // m_custodianCount
-
-        if self.upgradable {
-            let required_votes = if custodian_count <= 2 {
-                custodian_count
-            } else {
-                (custodian_count * 2 + 1) / 3
-            };
-
-            data.append_u32(0)?; // m_updateRequestsMask
-            data.append_u8(required_votes)?; // m_requiredVotes
-
-            let mut updates = ton_types::BuilderData::new();
-            updates.append_bit_zero()?; // empty m_updateRequests
-
-            data.append_reference_cell(updates.into_cell()?); // sub reference
-        }
-
-        data.append_u8(std::cmp::min(required_confirms, custodian_count))?; // m_defaultRequiredConfirmations
-
-        data.append_bit_zero()?; // empty m_transactions
+        // Compute data params
+        let owner_key = self.custodians.first().unwrap_or(&self.pubkey).as_bytes();
 
         let mut custodians = ton_types::HashmapE::with_bit_len(256);
-        for (i, pubkey) in self.custodians.into_iter().enumerate() {
+        for (i, pubkey) in self.custodians.iter().enumerate() {
             custodians.set(
                 ton_types::SliceData::from_raw(pubkey.as_bytes().to_vec(), 256),
                 &ton_types::SliceData::from_raw(vec![i as u8], 8),
             )?;
         }
-        custodians.write_to(&mut data)?; // m_custodians
+
+        let default_required_confirmations = std::cmp::min(required_confirms, custodian_count);
+
+        let required_votes = if custodian_count <= 2 {
+            custodian_count
+        } else {
+            (custodian_count * 2 + 1) / 3
+        };
+
+        let mut data = ton_types::BuilderData::new();
+
+        // Write headers
+        data.append_raw(self.pubkey.as_bytes(), 256)?; // pubkey
+        data.append_u64(0)?; // time
+        data.append_bit_one()?; // constructor flag
+
+        // Write state variables
+        match self.ty {
+            MultisigType::SafeMultisig => {
+                data.append_raw(owner_key, 256)?; // m_ownerKey
+                data.append_raw(&[0; 32], 256)?; // m_requestsMask
+                data.append_u8(custodian_count)?; // m_custodianCount
+                data.append_u8(default_required_confirmations)?; // m_defaultRequiredConfirmations
+                data.append_bit_zero()?; // empty m_transactions
+                custodians.write_to(&mut data)?; // m_custodians
+            }
+            MultisigType::SetcodeMultisig => {
+                data.append_raw(owner_key, 256)?; // m_ownerKey
+                data.append_raw(&[0; 32], 256)?; // m_requestsMask
+                data.append_u8(custodian_count)?; // m_custodianCount
+                data.append_u32(0)?; // m_updateRequestsMask
+                data.append_u8(required_votes)?; // m_requiredVotes
+
+                let mut updates = ton_types::BuilderData::new();
+                updates.append_bit_zero()?; // empty m_updateRequests
+                data.append_reference_cell(updates.into_cell()?); // sub reference
+
+                data.append_u8(default_required_confirmations)?; // m_defaultRequiredConfirmations
+                data.append_bit_zero()?; // empty m_transactions
+                custodians.write_to(&mut data)?; // m_custodians
+            }
+            MultisigType::Multisig2 => {
+                data.append_raw(owner_key, 256)?; // m_ownerKey
+                data.append_raw(&[0; 32], 256)?; // m_requestsMask
+                data.append_bit_zero()?; // empty m_transactions
+                custodians.write_to(&mut data)?; // m_custodians
+                data.append_u8(custodian_count)?; // m_custodianCount
+                data.append_bit_zero()?; // empty m_updateRequests
+                data.append_u32(0)?; // m_updateRequestsMask
+                data.append_u8(required_votes)?; // m_requiredVotes
+                data.append_u8(default_required_confirmations)?; // m_defaultRequiredConfirmations
+                data.append_u32(self.lifetime.unwrap_or(DEFAULT_LIFETIME))?;
+            }
+        };
 
         // "Deploy" wallet
         state_init.data = Some(data.into_cell()?);
@@ -294,6 +356,7 @@ static ELECTOR_CODE: &[u8] = include_bytes!("elector_code.boc");
 static MINTER_STATE: &[u8] = include_bytes!("minter_state.boc");
 static GIVER_STATE: &[u8] = include_bytes!("giver_state.boc");
 static MULTISIG_CODE: &[u8] = include_bytes!("multisig_code.boc");
+static MULTISIG2_CODE: &[u8] = include_bytes!("multisig2_code.boc");
 static SETCODE_MULTISIG_CODE: &[u8] = include_bytes!("setcode_multisig_code.boc");
 
 #[cfg(test)]
@@ -315,7 +378,10 @@ mod tests {
     #[test]
     fn check_safe_multisig_address() {
         assert_eq!(
-            MultisigBuilder::new(test_pubkey()).build(1000).unwrap().0,
+            MultisigBuilder::new(test_pubkey(), MultisigType::SafeMultisig)
+                .build_with_balance(1000)
+                .unwrap()
+                .0,
             ton_types::UInt256::from_str(
                 "9d98e2c829b309abebfa1d3745a62a8b11b68233a1b5d1044f6e09e380d67b97"
             )
@@ -326,9 +392,8 @@ mod tests {
     #[test]
     fn check_setcode_multisig_address() {
         assert_eq!(
-            MultisigBuilder::new(test_pubkey())
-                .upgradable(true)
-                .build(1000)
+            MultisigBuilder::new(test_pubkey(), MultisigType::Multisig2)
+                .build_with_balance(1000)
                 .unwrap()
                 .0,
             ton_types::UInt256::from_str(
