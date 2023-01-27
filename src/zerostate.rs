@@ -93,7 +93,7 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
         ton_types::serialize_toc(&cell).context("Failed to serialize masterchain zerostate")?;
     let file_hash = ton_types::UInt256::calc_file_hash(&bytes);
 
-    let path = path.as_ref().join(format!("{:x}.boc", file_hash));
+    let path = path.as_ref().join(format!("{file_hash:x}.boc"));
     std::fs::write(path, bytes).context("Failed to write masterchain zerostate")?;
 
     let shard_id = ton_block::SHARD_FULL as i64;

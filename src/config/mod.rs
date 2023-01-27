@@ -179,7 +179,7 @@ impl ConfigContract {
             async move {
                 loop {
                     if let Err(e) = subscription.lock().await.refresh().await {
-                        eprintln!("Failed to update config subscription: {:?}", e);
+                        eprintln!("Failed to update config subscription: {e:?}");
                     }
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }

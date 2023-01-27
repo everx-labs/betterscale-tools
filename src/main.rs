@@ -17,13 +17,9 @@ mod system_accounts;
 mod zerostate;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     env_logger::init();
-
-    if let Err(e) = run(argh::from_env()).await {
-        eprintln!("{:?}", e);
-        std::process::exit(1);
-    }
+    run(argh::from_env()).await
 }
 
 async fn run(app: App) -> Result<()> {

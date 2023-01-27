@@ -41,7 +41,7 @@ pub fn mine(
             "Static field not found. Available: {}",
             abi.data
                 .keys()
-                .map(|key| format!("'{}'", key))
+                .map(|key| format!("'{key}'"))
                 .collect::<Vec<_>>()
                 .join(", ")
         )
@@ -149,7 +149,7 @@ pub fn mine(
                 if global_max_affinity.fetch_max(address_affinity, Ordering::SeqCst) == max_affinity
                 {
                     let token_address = token_wallet
-                        .map(|addr| format!(" | Token: 0:{:x}", addr))
+                        .map(|addr| format!(" | Token: 0:{addr:x}"))
                         .unwrap_or_default();
 
                     println!(
