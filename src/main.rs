@@ -67,6 +67,9 @@ async fn run(app: App) -> Result<()> {
                 .required_confirms(args.required_confirms)
                 .lifetime(args.lifetime)
                 .build_with_balance(args.balance),
+                AccountSubcommand::Wallet(args) => {
+                    system_accounts::build_ever_wallet(args.balance, parse_public_key(args.pubkey)?)
+                }
             }
             .context("Failed to build account")?;
 
@@ -223,6 +226,7 @@ struct CmdAccount {
 enum AccountSubcommand {
     Giver(CmdAccountGiver),
     Multisig(CmdAccountMultisig),
+    Wallet(CmdAccountWallet),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -266,6 +270,19 @@ struct CmdAccountMultisig {
     /// custom transaction lifetime in seconds
     #[argh(option, long = "lifetime", short = 'l')]
     lifetime: Option<u32>,
+
+    /// account balance in nano EVER
+    #[argh(option, long = "balance", short = 'b')]
+    balance: u128,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Generates ever wallet account zerostate entry
+#[argh(subcommand, name = "wallet")]
+struct CmdAccountWallet {
+    /// account public key
+    #[argh(option, long = "pubkey", short = 'p')]
+    pubkey: String,
 
     /// account balance in nano EVER
     #[argh(option, long = "balance", short = 'b')]

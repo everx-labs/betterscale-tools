@@ -346,6 +346,41 @@ impl MultisigBuilder {
     }
 }
 
+pub fn build_ever_wallet(
+    balance: u128,
+    pubkey: PublicKey,
+) -> Result<(ton_types::UInt256, ton_block::Account)> {
+    let mut data = ton_types::BuilderData::new();
+    data.append_raw(pubkey.as_bytes(), 256)?.append_u64(0)?;
+    let data = data.into_cell()?;
+
+    let state_init = ton_block::StateInit {
+        code: Some(nekoton::contracts::wallets::code::ever_wallet()),
+        data: Some(data),
+        ..Default::default()
+    };
+
+    let address = state_init
+        .hash()
+        .context("Failed to serialize state init")?;
+
+    let mut account = ton_block::Account::Account(ton_block::AccountStuff {
+        addr: make_address(address).context("Failed to create validator address")?,
+        storage_stat: Default::default(),
+        storage: ton_block::AccountStorage {
+            last_trans_lt: 0,
+            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
+            state: ton_block::AccountState::AccountActive { state_init },
+            init_code_hash: None,
+        },
+    });
+    account
+        .update_storage_stat()
+        .context("Failed to update storage stat")?;
+
+    Ok((address, account))
+}
+
 fn make_address(address: ton_types::UInt256) -> Result<ton_block::MsgAddressInt> {
     ton_block::MsgAddressInt::with_standart(None, -1, address.into())
         .context("Failed to create address")
