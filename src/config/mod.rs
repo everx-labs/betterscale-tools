@@ -195,13 +195,25 @@ impl ConfigContract {
     }
 
     async fn execute_action(&self, secret: &ed25519::SecretKey, action: Action) -> Result<()> {
+        let signature_id = self
+            .transport
+            .get_capabilities(&SimpleClock)
+            .await
+            .context("Failed to get capabilities")?
+            .signature_id();
+
         let seqno = self
             .check_state(Some(ed25519::PublicKey::from(secret)))
             .await?;
 
-        let (message, expire_at) =
-            create_message(seqno, &self.address, action, ed25519::KeyPair::from(secret))
-                .context("Failed to create action message")?;
+        let (message, expire_at) = create_message(
+            seqno,
+            &self.address,
+            action,
+            ed25519::KeyPair::from(secret),
+            signature_id,
+        )
+        .context("Failed to create action message")?;
 
         self.send_message(message, expire_at)
             .await
@@ -283,6 +295,7 @@ fn create_message(
     address: &ton_block::MsgAddressInt,
     action: Action,
     keys: ed25519::KeyPair,
+    signature_id: Option<i32>,
 ) -> Result<(ton_block::Message, u32)> {
     let (action, data) = action.build().context("Failed to build action")?;
 
@@ -300,7 +313,18 @@ fn create_message(
         .append_builder(&data)?; // action data
 
     let hash = builder.clone().into_cell()?.repr_hash();
-    let signature = keys.sign_raw(hash.as_slice());
+
+    let data = match signature_id {
+        Some(signature_id) => {
+            let mut result = Vec::with_capacity(4 + 32);
+            result.extend_from_slice(&signature_id.to_be_bytes());
+            result.extend_from_slice(hash.as_slice());
+            std::borrow::Cow::<[u8]>::Owned(result)
+        }
+        None => std::borrow::Cow::<[u8]>::Borrowed(hash.as_slice()),
+    };
+
+    let signature = keys.sign_raw(data.as_ref());
     builder.prepend_raw(&signature, 512)?;
 
     let mut message =
