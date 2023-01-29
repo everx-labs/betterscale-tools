@@ -159,11 +159,12 @@ async fn run(app: App) -> Result<()> {
                 let secret = load_secret_key(args.sign)?;
                 let keys = ed25519::KeyPair::from(&secret);
 
-                let action = config::Action::SubmitParam(ton_block::ConfigParamEnum::ConfigParam0(
-                    ton_block::ConfigParam0 {
-                        config_addr: ton_types::UInt256::from_be_bytes(
-                            &args.address.address().get_bytestring(0),
-                        ),
+                let action = config::Action::SubmitParam(ton_block::ConfigParamEnum::ConfigParam8(
+                    ton_block::ConfigParam8 {
+                        global_version: ton_block::GlobalVersion {
+                            version: 34,
+                            capabilities: 0x717ae,
+                        },
                     },
                 ));
 
