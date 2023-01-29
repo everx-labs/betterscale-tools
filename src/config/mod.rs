@@ -212,6 +212,7 @@ impl ConfigContract {
             action,
             ed25519::KeyPair::from(secret),
             signature_id,
+            60,
         )
         .context("Failed to create action message")?;
 
@@ -290,12 +291,13 @@ impl GenericContractSubscriptionHandler for ConfigContractHandler {
     fn on_transactions_found(&self, _: Vec<Transaction>, _: TransactionsBatchInfo) {}
 }
 
-fn create_message(
+pub fn create_message(
     seqno: u32,
     address: &ton_block::MsgAddressInt,
     action: Action,
     keys: ed25519::KeyPair,
     signature_id: Option<i32>,
+    timeout: u32,
 ) -> Result<(ton_block::Message, u32)> {
     let (action, data) = action.build().context("Failed to build action")?;
 
@@ -303,7 +305,7 @@ fn create_message(
         .duration_since(std::time::UNIX_EPOCH)
         .trust_me()
         .as_secs() as u32;
-    let expire_at = now + 60;
+    let expire_at = now + timeout;
 
     let mut builder = ton_types::BuilderData::new();
     builder
@@ -356,7 +358,7 @@ fn make_client(url: String) -> Result<Arc<dyn Transport>> {
 }
 
 #[derive(Debug, Clone)]
-enum Action {
+pub enum Action {
     /// Param index and param value
     SubmitParam(ton_block::ConfigParamEnum),
 

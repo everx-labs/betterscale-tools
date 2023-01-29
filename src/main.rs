@@ -155,6 +155,40 @@ async fn run(app: App) -> Result<()> {
 
                 config::set_elector_code(args.url, &args.address, &secret, code, params).await
             }
+            CmdConfigSubcommand::ForceKeyBlock(args) => {
+                let secret = load_secret_key(args.sign)?;
+                let keys = ed25519::KeyPair::from(&secret);
+
+                let action = config::Action::SubmitParam(ton_block::ConfigParamEnum::ConfigParam0(
+                    ton_block::ConfigParam0 {
+                        config_addr: ton_types::UInt256::from_be_bytes(
+                            &args.address.address().get_bytestring(0),
+                        ),
+                    },
+                ));
+
+                let (message, expire_at) = config::create_message(
+                    args.seqno,
+                    &args.address,
+                    action,
+                    keys,
+                    args.signature_id,
+                    args.timeout,
+                )
+                .context("Failed to create message")?;
+
+                let message = ton_types::serialize_toc(&message.serialize()?)?;
+
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "boc": base64::encode(message),
+                        "expire_at": expire_at,
+                    })
+                );
+
+                Ok(())
+            }
         },
         Subcommand::Mine(args) => mine::mine(
             args.tvc,
@@ -309,6 +343,7 @@ enum CmdConfigSubcommand {
     SetParam(CmdConfigSetParam),
     SetMasterKey(CmdConfigSetMasterKey),
     UpdateElector(CmdConfigUpdateElector),
+    ForceKeyBlock(CmdConfigForceKeyBlock),
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
@@ -401,6 +436,36 @@ struct CmdConfigUpdateElector {
     /// path to the code or empty for input from stdin
     #[argh(positional)]
     code: Option<String>,
+}
+
+#[derive(Debug, PartialEq, FromArgs)]
+/// Nop update config
+#[argh(subcommand, name = "forceKeyBlock")]
+struct CmdConfigForceKeyBlock {
+    /// config address
+    #[argh(
+        option,
+        long = "address",
+        short = 'a',
+        default = "default_config_address()"
+    )]
+    address: ton_block::MsgAddressInt,
+
+    /// config state seqno
+    #[argh(option, default = "0")]
+    seqno: u32,
+
+    /// path to the file with keys
+    #[argh(option, long = "sign", short = 's')]
+    sign: PathBuf,
+
+    /// optional signature id
+    #[argh(option)]
+    signature_id: Option<i32>,
+
+    /// message expiration timeout
+    #[argh(option, default = "60")]
+    timeout: u32,
 }
 
 #[derive(Debug, PartialEq, FromArgs)]
