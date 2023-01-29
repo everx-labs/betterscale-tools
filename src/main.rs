@@ -159,14 +159,14 @@ async fn run(app: App) -> Result<()> {
                 let secret = load_secret_key(args.sign)?;
                 let keys = ed25519::KeyPair::from(&secret);
 
-                let action = config::Action::SubmitParam(ton_block::ConfigParamEnum::ConfigParam8(
-                    ton_block::ConfigParam8 {
-                        global_version: ton_block::GlobalVersion {
-                            version: 34,
-                            capabilities: 0x717ae,
-                        },
-                    },
-                ));
+                let action = config::Action::SubmitParam(
+                    ton_block::ConfigParamEnum::ConfigParam15(ton_block::ConfigParam15 {
+                        validators_elected_for: 900,
+                        elections_start_before: 450,
+                        elections_end_before: 50,
+                        stake_held_for: 450,
+                    }),
+                );
 
                 let (message, expire_at) = config::create_message(
                     args.seqno,
