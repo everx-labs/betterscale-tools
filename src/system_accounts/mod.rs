@@ -20,6 +20,7 @@ pub fn build_minter(pubkey: PublicKey) -> Result<ton_block::Account> {
         }
     }
 
+    account.set_balance(ton_block::CurrencyCollection::default());
     Ok(account)
 }
 
