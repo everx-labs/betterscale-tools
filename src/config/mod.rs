@@ -143,6 +143,11 @@ define_params! {
         P28(CatchainParams) => |v| ConfigParamEnum::ConfigParam28(v.build()),
         /// Consensus config
         P29(ConsensusParams) => |v| ConfigParamEnum::ConfigParam29(v.build()),
+
+        /// Banned accounts by address
+        P100(BannedAccountsByAddress) => |v| v.build().unwrap(),
+        /// Banned accounts by code hash
+        P101(BannedAccountsByCodeHash) => |v| v.build().unwrap(),
     }
 }
 

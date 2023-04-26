@@ -89,6 +89,54 @@ impl MandatoryParams {
 }
 
 #[derive(Deserialize)]
+#[serde(transparent, deny_unknown_fields)]
+pub struct BannedAccountsByAddress(
+    #[serde(with = "serde_vec_address")] pub Vec<ton_block::MsgAddressInt>,
+);
+
+impl BannedAccountsByAddress {
+    pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
+        use ton_block::{Deserializable, Serializable};
+        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, SliceData};
+
+        ton_block::define_HashmapE! {BannedAccounts, 256, ()}
+
+        let mut addresses = BannedAccounts::default();
+        for address in &self.0 {
+            let key = address.get_address();
+            addresses.set(&key, &())?;
+        }
+        let addresses = addresses.serialize()?.into();
+
+        Ok(ton_block::ConfigParamEnum::ConfigParamAny(100, addresses))
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(transparent, deny_unknown_fields)]
+pub struct BannedAccountsByCodeHash(
+    #[serde(with = "serde_vec_uint256")] pub Vec<ton_types::UInt256>,
+);
+
+impl BannedAccountsByCodeHash {
+    pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
+        use ton_block::{Deserializable, Serializable};
+        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, SliceData};
+
+        ton_block::define_HashmapE! {BannedAccounts, 256, ()}
+
+        let mut code_hashes = BannedAccounts::default();
+        for code_hash in &self.0 {
+            let key = ton_types::SliceData::from(code_hash);
+            code_hashes.set(&key, &())?;
+        }
+        let code_hashes = code_hashes.serialize()?.into();
+
+        Ok(ton_block::ConfigParamEnum::ConfigParamAny(101, code_hashes))
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Currency {
     pub id: u32,
