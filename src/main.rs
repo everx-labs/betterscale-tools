@@ -21,7 +21,8 @@ mod zerostate;
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    run(argh::from_env()).await
+    let ArgsOrVersion::<App>(app) = argh::from_env::<_>();
+    run(app).await
 }
 
 async fn run(app: App) -> Result<()> {
@@ -538,5 +539,43 @@ fn hex_or_base64<const N: usize>(data: &str) -> Result<[u8; N]> {
             Ok(data) if data.len() == N => Ok(data.try_into().unwrap()),
             _ => Err(anyhow::anyhow!("Invalid data")),
         },
+    }
+}
+
+struct ArgsOrVersion<T: argh::FromArgs>(T);
+
+impl<T: argh::FromArgs> argh::TopLevelCommand for ArgsOrVersion<T> {}
+
+impl<T: argh::FromArgs> argh::FromArgs for ArgsOrVersion<T> {
+    fn from_args(command_name: &[&str], args: &[&str]) -> Result<Self, argh::EarlyExit> {
+        /// Also use argh for catching `--version`-only invocations
+        #[derive(argh::FromArgs)]
+        struct Version {
+            /// print version information and exit
+            #[argh(switch, short = 'v')]
+            pub version: bool,
+        }
+
+        match Version::from_args(command_name, args) {
+            Ok(v) if v.version => Err(argh::EarlyExit {
+                output: format!(
+                    "{} {}",
+                    command_name.first().unwrap_or(&""),
+                    env!("CARGO_PKG_VERSION")
+                ),
+                status: Ok(()),
+            }),
+            Err(exit) if exit.status.is_ok() => {
+                let help = match T::from_args(command_name, &["--help"]) {
+                    Ok(_) => unreachable!(),
+                    Err(exit) => exit.output,
+                };
+                Err(argh::EarlyExit {
+                    output: format!("{help}  -v, --version     print version information and exit"),
+                    status: Ok(()),
+                })
+            }
+            _ => T::from_args(command_name, args).map(Self),
+        }
     }
 }
