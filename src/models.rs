@@ -89,6 +89,28 @@ impl MandatoryParams {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransactionTreeLimits {
+    pub max_depth: u32,
+    pub max_cumulative_width: u32,
+    pub width_multiplier: u32,
+}
+
+impl TransactionTreeLimits {
+    pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
+        use ton_block::Serializable;
+
+        let mut model = ton_types::BuilderData::new();
+        self.max_depth.write_to(&mut model)?;
+        self.max_cumulative_width.write_to(&mut model)?;
+        self.width_multiplier.write_to(&mut model)?;
+        let model = model.into_cell()?.into();
+
+        Ok(ton_block::ConfigParamEnum::ConfigParamAny(50, model))
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(transparent, deny_unknown_fields)]
 pub struct BannedAccountsByAddress(
     #[serde(with = "serde_vec_address")] pub Vec<ton_block::MsgAddressInt>,
@@ -97,42 +119,56 @@ pub struct BannedAccountsByAddress(
 impl BannedAccountsByAddress {
     pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
         use ton_block::{Deserializable, Serializable};
-        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, SliceData};
+        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData};
 
-        ton_block::define_HashmapE! {BannedAccounts, 256, ()}
+        #[derive(Clone, Debug, Eq, PartialEq, Default)]
+        pub struct SuspendedAddressesKey {
+            pub workchain_id: i32,
+            pub address: ton_types::UInt256,
+        }
+        impl SuspendedAddressesKey {
+            pub fn new(workchain_id: i32, address: ton_types::UInt256) -> Self {
+                Self {
+                    workchain_id,
+                    address,
+                }
+            }
+        }
+        impl Serializable for SuspendedAddressesKey {
+            fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+                cell.append_i32(self.workchain_id)?;
+                cell.append_raw(self.address.as_slice(), 256)?;
+                Ok(())
+            }
+        }
+        impl Deserializable for SuspendedAddressesKey {
+            fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+                self.workchain_id = slice.get_next_i32()?;
+                self.address = ton_types::UInt256::construct_from(slice)?;
+                Ok(())
+            }
+        }
+        ton_block::define_HashmapE! {SuspendedAddresses, 288, ()}
+        impl SuspendedAddresses {
+            pub fn add_suspended_address(
+                &mut self,
+                wc: i32,
+                addr: ton_types::UInt256,
+            ) -> Result<()> {
+                let key = SuspendedAddressesKey::new(wc, addr);
+                self.set(&key, &())
+            }
+        }
 
-        let mut addresses = BannedAccounts::default();
-        for address in &self.0 {
-            let key = address.get_address();
-            addresses.set(&key, &())?;
+        let mut addresses = SuspendedAddresses::default();
+        for addr in &self.0 {
+            let wc = addr.workchain_id();
+            let addr = ton_types::UInt256::construct_from(&mut addr.address())?;
+            addresses.add_suspended_address(wc, addr)?;
         }
         let addresses = addresses.serialize()?.into();
 
-        Ok(ton_block::ConfigParamEnum::ConfigParamAny(100, addresses))
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(transparent, deny_unknown_fields)]
-pub struct BannedAccountsByCodeHash(
-    #[serde(with = "serde_vec_uint256")] pub Vec<ton_types::UInt256>,
-);
-
-impl BannedAccountsByCodeHash {
-    pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
-        use ton_block::{Deserializable, Serializable};
-        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, SliceData};
-
-        ton_block::define_HashmapE! {BannedAccounts, 256, ()}
-
-        let mut code_hashes = BannedAccounts::default();
-        for code_hash in &self.0 {
-            let key = ton_types::SliceData::from(code_hash);
-            code_hashes.set(&key, &())?;
-        }
-        let code_hashes = code_hashes.serialize()?.into();
-
-        Ok(ton_block::ConfigParamEnum::ConfigParamAny(101, code_hashes))
+        Ok(ton_block::ConfigParamEnum::ConfigParamAny(44, addresses))
     }
 }
 

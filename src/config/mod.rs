@@ -145,9 +145,10 @@ define_params! {
         P29(ConsensusParams) => |v| ConfigParamEnum::ConfigParam29(v.build()),
 
         /// Banned accounts by address
-        P100(BannedAccountsByAddress) => |v| v.build().unwrap(),
-        /// Banned accounts by code hash
-        P101(BannedAccountsByCodeHash) => |v| v.build().unwrap(),
+        P44(BannedAccountsByAddress) => |v| v.build().unwrap(),
+
+        /// Transaction tree limits
+        P50(TransactionTreeLimits) => |v| v.build().unwrap(),
     }
 }
 
