@@ -32,6 +32,6 @@ nekoton-transport = { git = "https://github.com/broxus/nekoton.git", features = 
 nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
 nekoton-abi = { git = "https://github.com/broxus/nekoton.git" }
 
-ton_block = { git = "https://github.com/broxus/ton-labs-block.git" }
+ton_block = { git = "https://github.com/broxus/ton-labs-block.git", features = ["venom"] }
 ton_types = { git = "https://github.com/broxus/ton-labs-types.git" }
 ton_abi = { git = "https://github.com/broxus/ton-labs-abi.git" }

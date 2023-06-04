@@ -2,6 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use ton_block::{AddSub, Serializable};
+use ton_types::SliceData;
 
 use crate::ed25519::*;
 use crate::models::*;
@@ -49,9 +50,10 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
             Ok(true)
         })?;
 
-    ex.config
-        .config_params
-        .setref(12u32.serialize()?.into(), &workchains.serialize()?)?;
+    ex.config.config_params.setref(
+        12u32.serialize().and_then(SliceData::load_cell)?,
+        &workchains.serialize()?,
+    )?;
 
     let catchain_config = ex
         .config
@@ -68,7 +70,7 @@ pub fn prepare_zerostates<P: AsRef<Path>>(path: P, config: &str) -> Result<Strin
             ton_block::SHARD_FULL,
             ton_block::MASTERCHAIN_ID,
             0,
-            ton_block::UnixTime32(now),
+            ton_block::UnixTime32::from(now),
         )
         .context("Failed to compute validator subset")?
         .1;

@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use nekoton_utils::*;
 use num_bigint::BigInt;
 use serde::Deserialize;
+use ton_types::SliceData;
 
 #[derive(Deserialize)]
 pub struct ZerostateConfig {
@@ -104,7 +105,7 @@ impl TransactionTreeLimits {
         self.max_depth.write_to(&mut model)?;
         self.max_cumulative_width.write_to(&mut model)?;
         self.width_multiplier.write_to(&mut model)?;
-        let model = model.into_cell()?.into();
+        let model = model.into_cell().and_then(SliceData::load_cell)?;
 
         Ok(ton_block::ConfigParamEnum::ConfigParamAny(50, model))
     }
@@ -119,7 +120,7 @@ pub struct BannedAccountsByAddress(
 impl BannedAccountsByAddress {
     pub fn build(&self) -> Result<ton_block::ConfigParamEnum> {
         use ton_block::{Deserializable, Serializable};
-        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData};
+        use ton_types::{BuilderData, Cell, HashmapE, HashmapType, IBitstring};
 
         #[derive(Clone, Debug, Eq, PartialEq, Default)]
         pub struct SuspendedAddressesKey {
@@ -166,7 +167,7 @@ impl BannedAccountsByAddress {
             let addr = ton_types::UInt256::construct_from(&mut addr.address())?;
             addresses.add_suspended_address(wc, addr)?;
         }
-        let addresses = addresses.serialize()?.into();
+        let addresses = addresses.serialize().and_then(SliceData::load_cell)?;
 
         Ok(ton_block::ConfigParamEnum::ConfigParamAny(44, addresses))
     }
@@ -339,17 +340,17 @@ impl ElectorParams {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidatorCount {
-    pub min_validators: u32,
-    pub max_validators: u32,
-    pub max_main_validators: u32,
+    pub min_validators: u16,
+    pub max_validators: u16,
+    pub max_main_validators: u16,
 }
 
 impl ValidatorCount {
     pub fn build(&self) -> ton_block::ConfigParam16 {
         ton_block::ConfigParam16 {
-            max_validators: ton_block::Number16(self.max_validators),
-            max_main_validators: ton_block::Number16(self.max_main_validators),
-            min_validators: ton_block::Number16(self.min_validators),
+            max_validators: ton_block::Number16::from(self.max_validators),
+            max_main_validators: ton_block::Number16::from(self.max_main_validators),
+            min_validators: ton_block::Number16::from(self.min_validators),
         }
     }
 }

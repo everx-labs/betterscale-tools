@@ -8,6 +8,7 @@ use nekoton_abi::BuildTokenValue;
 use nekoton_utils::TrustMe;
 use rand::distributions::Distribution;
 use ton_block::{Deserializable, Serializable};
+use ton_types::SliceData;
 
 pub fn mine(
     tvc: impl AsRef<Path>,
@@ -65,7 +66,10 @@ pub fn mine(
 
     let original_data = abi
         .update_data(
-            tvc.data.clone().context("TVC doesn't have data")?.into(),
+            tvc.data
+                .clone()
+                .context("TVC doesn't have data")
+                .and_then(SliceData::load_cell)?,
             &init_data,
         )
         .context("Failed to update init data")?;
@@ -86,7 +90,8 @@ pub fn mine(
     for _ in 0..thread_count {
         let mut tvc = tvc.clone();
 
-        let nonce_key: ton_types::SliceData = field.key.serialize()?.into();
+        let nonce_key: ton_types::SliceData =
+            field.key.serialize().and_then(SliceData::load_cell)?;
         let mut original_data =
             ton_types::HashmapE::with_hashmap(64, original_data.reference_opt(0));
 
@@ -221,8 +226,11 @@ impl TokenState {
             .pack_into_chain(&ton_abi::contract::ABI_VERSION_2_2)
             .trust_me();
 
-        data.set_builder(1u64.serialize().trust_me().into(), &builder)
-            .trust_me();
+        data.set_builder(
+            1u64.serialize().and_then(SliceData::load_cell).trust_me(),
+            &builder,
+        )
+        .trust_me();
 
         Self { state, data }
     }
@@ -230,7 +238,7 @@ impl TokenState {
     fn compute_address(&mut self, address: ton_types::UInt256) -> ton_types::UInt256 {
         self.data
             .set_builder(
-                2u64.serialize().trust_me().into(),
+                2u64.serialize().and_then(SliceData::load_cell).trust_me(),
                 &ton_abi::TokenValue::Address(ton_block::MsgAddress::AddrStd(
                     ton_block::MsgAddrStd {
                         workchain_id: 0,

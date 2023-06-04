@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use ton_block::{Deserializable, GetRepresentationHash, Serializable};
-use ton_types::IBitstring;
+use ton_types::{IBitstring, SliceData};
 
 use crate::ed25519::*;
 
@@ -37,7 +37,7 @@ pub fn build_config_state(
         ton_types::deserialize_tree_of_cells(&mut code).context("Failed to read config code")?;
 
     let mut data = ton_types::BuilderData::new();
-    data.append_reference(ton_types::BuilderData::default());
+    data.checked_append_reference(ton_types::Cell::default())?;
     data.append_u32(0)?;
     data.append_raw(pubkey.as_bytes(), 256)?;
     data.append_bits(0, 1)?;
@@ -122,7 +122,7 @@ pub fn build_giver(
 
     let state_init = account.state_init_mut().expect("Shouldn't fail");
     if let Some(data) = state_init.data.take() {
-        let mut data: ton_types::SliceData = data.into();
+        let mut data = SliceData::load_cell(data)?;
         data.move_by(256).expect("invalid giver state");
 
         let mut new_data = ton_types::BuilderData::new();
@@ -138,9 +138,9 @@ pub fn build_giver(
         .hash()
         .context("Failed to serialize state init")?;
 
-    account.set_balance(ton_block::CurrencyCollection::from_grams(ton_block::Grams(
-        balance,
-    )));
+    account.set_balance(ton_block::CurrencyCollection::from_grams(
+        ton_block::Grams::new(balance)?,
+    ));
 
     account
         .update_storage_stat()
@@ -239,15 +239,18 @@ impl MultisigBuilder {
         // Compute address
         let mut init_params = ton_types::HashmapE::with_bit_len(64);
         init_params.set(
-            0u64.serialize()?.into(),
+            0u64.serialize().and_then(SliceData::load_cell)?,
             &ton_types::SliceData::from_raw(self.pubkey.as_bytes().to_vec(), 256),
         )?;
 
         if self.ty != MultisigType::Multisig2 {
-            init_params.set(8u64.serialize()?.into(), &{
+            let key = 8u64.serialize().and_then(SliceData::load_cell)?;
+
+            init_params.set(key, &{
+                let key = 0u64.serialize().and_then(SliceData::load_cell)?;
                 let mut map = ton_types::HashmapE::with_bit_len(64);
-                map.set(0u64.serialize()?.into(), &Default::default())?;
-                map.serialize()?.into()
+                map.set(key, &Default::default())?;
+                map.serialize().and_then(SliceData::load_cell)?
             })?;
         }
 
@@ -305,7 +308,7 @@ impl MultisigBuilder {
 
                 let mut updates = ton_types::BuilderData::new();
                 updates.append_bit_zero()?; // empty m_updateRequests
-                data.append_reference_cell(updates.into_cell()?); // sub reference
+                data.checked_append_reference(updates.into_cell()?)?; // sub reference
 
                 data.append_u8(default_required_confirmations)?; // m_defaultRequiredConfirmations
                 data.append_bit_zero()?; // empty m_transactions
@@ -334,7 +337,7 @@ impl MultisigBuilder {
             storage_stat: Default::default(),
             storage: ton_block::AccountStorage {
                 last_trans_lt: 0,
-                balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
+                balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams::new(balance)?),
                 state: ton_block::AccountState::AccountActive { state_init },
                 init_code_hash: None,
             },
@@ -370,7 +373,7 @@ pub fn build_ever_wallet(
         storage_stat: Default::default(),
         storage: ton_block::AccountStorage {
             last_trans_lt: 0,
-            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams(balance)),
+            balance: ton_block::CurrencyCollection::from_grams(ton_block::Grams::new(balance)?),
             state: ton_block::AccountState::AccountActive { state_init },
             init_code_hash: None,
         },

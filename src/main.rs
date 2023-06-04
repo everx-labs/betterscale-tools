@@ -149,7 +149,7 @@ async fn run(app: App) -> Result<()> {
                 let params = match args.params {
                     Some(params) => {
                         let cell = parse_cell(&params).context("Invalid params")?;
-                        Some(cell.into())
+                        Some(ton_types::SliceData::load_cell(cell)?)
                     }
                     None => None,
                 };
