@@ -355,6 +355,18 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
             config.consensus_params.build(),
         ))?;
 
+    // 61
+
+    if let Some(fast_finality_params) = config.fast_finality_params {
+        set_everx_config(&mut ex.config, 61, &fast_finality_params.build()?)?;
+    }
+
+    // 62
+
+    if let Some(smft_params) = config.smft_params {
+        set_everx_config(&mut ex.config, 62, &smft_params.build()?)?;
+    }
+
     // 31
 
     let mut fundamental_smc_addr = ton_block::FundamentalSmcAddresses::default();
@@ -406,6 +418,24 @@ fn prepare_mc_zerostate(config: &str) -> Result<ton_block::ShardStateUnsplit> {
         .context("Failed to write McStateExtra")?;
 
     Ok(state)
+}
+
+fn set_everx_config(
+    config: &mut ton_block::ConfigParams,
+    index: u32,
+    mut value: &[u8],
+) -> Result<()> {
+    let (cells, _, _, _) = ton_types::deserialize_cells_tree_ex(&mut value)?;
+    match cells.first() {
+        Some(value) => {
+            let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+            config.config_params.setref(key, value)?;
+            Ok(())
+        }
+        None => {
+            ton_types::fail!("no cell was deserialized")
+        }
+    }
 }
 
 impl ZerostateConfig {

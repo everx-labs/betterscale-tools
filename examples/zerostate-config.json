@@ -1,5 +1,5 @@
 {
-  "global_id": 1488,
+  "global_id": 17,
   "gen_utime": 1644173055,
   "config_public_key": "1161f67ca580dd2b9935967b04109e0e988601fc0894e145f7cd56534e817257",
   "minter_public_key": "1161f67ca580dd2b9935967b04109e0e988601fc0894e145f7cd56534e817257",
@@ -217,6 +217,41 @@
     "validators_public_keys": [
       "0000000000000000000000000000000000000000000000000000000000000000",
       "1161f67ca580dd2b9935967b04109e0e988601fc0894e145f7cd56534e817257"
-    ]
+    ],
+    "fast_finality_params": {
+      "split_merge_interval": 128,
+      "collator_range_len": 200,
+      "lost_collator_timeout": 60,
+      "mempool_validators_count": 3,
+      "mempool_rotated_count": 2,
+      "unreliability_fine": 1000,
+      "unreliability_weak_fading": 1,
+      "unreliability_strong_fading": 1,
+      "unreliability_max": 65535,
+      "unreliability_weight": 1,
+      "familiarity_collator_fine": 2,
+      "familiarity_msgpool_fine": 1,
+      "familiarity_fading": 1,
+      "familiarity_max": 65535,
+      "familiarity_weight": 2,
+      "busyness_collator_fine": 4,
+      "busyness_msgpool_fine": 1,
+      "busyness_weight": 1,
+      "candidates_percentile": 5
+    },
+    "smft_params": {
+      "min_forwarding_neighbours_count": 5,
+      "max_forwarding_neighbours_count": 32,
+      "min_far_neighbours_count": 2,
+      "max_far_neighbours_count": 5,
+      "min_block_sync_period_ms": 300,
+      "max_block_sync_period_ms": 600,
+      "min_far_neighbours_sync_period_ms": 1000,
+      "max_far_neighbours_sync_period_ms": 2000,
+      "far_neighbours_resync_period_ms": 1000,
+      "block_sync_lifetime_period_ms": 10000,
+      "block_lifetime_period_ms": 240000,
+      "verification_obligation_cutoff": 20
+    }
   }
 }
