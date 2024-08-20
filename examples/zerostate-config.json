@@ -251,7 +251,6 @@
       "far_neighbours_resync_period_ms": 1000,
       "block_sync_lifetime_period_ms": 10000,
       "block_lifetime_period_ms": 240000,
-      "verification_obligation_cutoff": 20
       "verification_obligation_cutoff_numerator": 1,
       "verification_obligation_cutoff_denominator": 5,
       "delivery_cutoff_numerator": 1,
