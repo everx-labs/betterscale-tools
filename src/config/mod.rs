@@ -249,7 +249,7 @@ impl ConfigContract {
     async fn check_state(&self, required_public: Option<ed25519::PublicKey>) -> Result<u32> {
         let config_state = match self.transport.get_contract_state(&self.address).await? {
             RawContractState::Exists(contract) => contract.account,
-            RawContractState::NotExists => return Err(ConfigError::ConfigNotExists.into()),
+            RawContractState::NotExists { .. } => return Err(ConfigError::ConfigNotExists.into()),
         };
 
         let mut data: SliceData = match config_state.storage.state {

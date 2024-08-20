@@ -666,7 +666,16 @@ pub struct SmftParams {
     pub far_neighbours_resync_period_ms: u32,
     pub block_sync_lifetime_period_ms: u32,
     pub block_lifetime_period_ms: u32,
-    pub verification_obligation_cutoff: u32,
+    pub verification_obligation_cutoff_numerator: u32,
+    pub verification_obligation_cutoff_denominator: u32,
+    pub delivery_cutoff_numerator: u32,
+    pub delivery_cutoff_denominator: u32,
+    pub manual_candidate_loading_delay_ms: u32,
+    pub mc_allowed_force_delivery_delay_ms: u32,
+    pub mc_force_delivery_duplication_factor_numerator: u32,
+    pub mc_force_delivery_duplication_factor_denominator: u32,
+    pub mc_max_delivery_waiting_timeout_ms: u32,
+    pub use_debug_bls_keys: bool,
 }
 
 impl SmftParams {
@@ -683,7 +692,16 @@ impl SmftParams {
             far_neighbours_resync_period_ms: self.far_neighbours_resync_period_ms,
             block_sync_lifetime_period_ms: self.block_sync_lifetime_period_ms,
             block_lifetime_period_ms: self.block_lifetime_period_ms,
-            verification_obligation_cutoff: self.verification_obligation_cutoff,
+            verification_obligation_cutoff_numerator: self.verification_obligation_cutoff_numerator,
+            verification_obligation_cutoff_denominator: self.verification_obligation_cutoff_denominator,
+            delivery_cutoff_numerator: self.delivery_cutoff_numerator,
+            delivery_cutoff_denominator: self.delivery_cutoff_denominator,
+            manual_candidate_loading_delay_ms: self.manual_candidate_loading_delay_ms,
+            mc_allowed_force_delivery_delay_ms: self.mc_allowed_force_delivery_delay_ms,
+            mc_force_delivery_duplication_factor_numerator: self.mc_force_delivery_duplication_factor_numerator,
+            mc_force_delivery_duplication_factor_denominator: self.mc_force_delivery_duplication_factor_denominator,
+            mc_max_delivery_waiting_timeout_ms: self.mc_max_delivery_waiting_timeout_ms,
+            use_debug_bls_keys: self.use_debug_bls_keys
         })
     }
 }
