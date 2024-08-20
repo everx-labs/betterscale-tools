@@ -220,7 +220,7 @@
     ],
     "fast_finality_params": {
       "split_merge_interval": 128,
-      "collator_range_len": 200,
+      "collator_range_len": 5000,
       "lost_collator_timeout": 60,
       "mempool_validators_count": 3,
       "mempool_rotated_count": 2,
