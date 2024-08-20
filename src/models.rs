@@ -48,6 +48,8 @@ pub struct NetworkConfig {
     pub msg_forward_prices: MsgForwardPrices,
     pub catchain_params: CatchainParams,
     pub consensus_params: ConsensusParams,
+    pub fast_finality_params: Option<FastFinalityParams>,
+    pub smft_params: Option<SmftParams>,
     #[serde(with = "serde_vec_uint256")]
     pub fundamental_addresses: Vec<ton_types::UInt256>,
     #[serde(with = "serde_vec_uint256")]
@@ -593,6 +595,96 @@ impl ConsensusParams {
                 max_collated_bytes: self.max_collated_bytes,
             },
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FastFinalityParams {
+    pub split_merge_interval: u32,
+    pub collator_range_len: u32,
+    pub lost_collator_timeout: u32,
+    pub mempool_validators_count: u32,
+    pub mempool_rotated_count: u32, // How many validators are changed beetween sessions.
+    // Must be <= mempool_validators_count.
+    pub unreliability_fine: u16,
+    pub unreliability_weak_fading: u16,
+    pub unreliability_strong_fading: u16,
+    pub unreliability_max: u16,
+    pub unreliability_weight: u16,
+
+    pub familiarity_collator_fine: u16,
+    pub familiarity_msgpool_fine: u16,
+    pub familiarity_fading: u16,
+    pub familiarity_max: u16,
+    pub familiarity_weight: u16,
+
+    pub busyness_collator_fine: u16,
+    pub busyness_msgpool_fine: u16,
+    pub busyness_weight: u16,
+
+    pub candidates_percentile: u8,
+}
+
+impl FastFinalityParams {
+    pub fn build(&self) -> Result<Vec<u8>> {
+        ever_block::Serializable::write_to_bytes(&ever_block::FastFinalityConfig {
+            split_merge_interval: self.split_merge_interval,
+            collator_range_len: self.collator_range_len,
+            lost_collator_timeout: self.lost_collator_timeout,
+            mempool_validators_count: self.mempool_validators_count,
+            mempool_rotated_count: self.mempool_rotated_count,
+            unreliability_fine: self.unreliability_fine,
+            unreliability_weak_fading: self.unreliability_weak_fading,
+            unreliability_strong_fading: self.unreliability_strong_fading,
+            unreliability_max: self.unreliability_max,
+            unreliability_weight: self.unreliability_weight,
+            familiarity_collator_fine: self.familiarity_collator_fine,
+            familiarity_msgpool_fine: self.familiarity_msgpool_fine,
+            familiarity_fading: self.familiarity_fading,
+            familiarity_max: self.familiarity_max,
+            familiarity_weight: self.familiarity_weight,
+            busyness_collator_fine: self.busyness_collator_fine,
+            busyness_msgpool_fine: self.busyness_msgpool_fine,
+            busyness_weight: self.busyness_weight,
+            candidates_percentile: self.candidates_percentile,
+        })
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SmftParams {
+    pub min_forwarding_neighbours_count: u32,
+    pub max_forwarding_neighbours_count: u32,
+    pub min_far_neighbours_count: u32,
+    pub max_far_neighbours_count: u32,
+    pub min_block_sync_period_ms: u32,
+    pub max_block_sync_period_ms: u32,
+    pub min_far_neighbours_sync_period_ms: u32,
+    pub max_far_neighbours_sync_period_ms: u32,
+    pub far_neighbours_resync_period_ms: u32,
+    pub block_sync_lifetime_period_ms: u32,
+    pub block_lifetime_period_ms: u32,
+    pub verification_obligation_cutoff: u32,
+}
+
+impl SmftParams {
+    pub fn build(&self) -> Result<Vec<u8>> {
+        ever_block::Serializable::write_to_bytes(&ever_block::SmftParams {
+            min_forwarding_neighbours_count: self.min_forwarding_neighbours_count,
+            max_forwarding_neighbours_count: self.max_forwarding_neighbours_count,
+            min_far_neighbours_count: self.min_far_neighbours_count,
+            max_far_neighbours_count: self.max_far_neighbours_count,
+            min_block_sync_period_ms: self.min_block_sync_period_ms,
+            max_block_sync_period_ms: self.max_block_sync_period_ms,
+            min_far_neighbours_sync_period_ms: self.min_far_neighbours_sync_period_ms,
+            max_far_neighbours_sync_period_ms: self.max_far_neighbours_sync_period_ms,
+            far_neighbours_resync_period_ms: self.far_neighbours_resync_period_ms,
+            block_sync_lifetime_period_ms: self.block_sync_lifetime_period_ms,
+            block_lifetime_period_ms: self.block_lifetime_period_ms,
+            verification_obligation_cutoff: self.verification_obligation_cutoff,
+        })
     }
 }
 
